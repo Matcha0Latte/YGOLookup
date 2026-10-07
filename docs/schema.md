@@ -1,173 +1,161 @@
-# Schema
+# 数据库 Schema
 
-SQLite is the source of truth. This document is the contract for every layer
-above it — if a field is not documented here, no layer may assume it exists.
+SQLite 是事实来源。本文是它之上所有层的契约——**任何字段只要没写在这里，其他层就不许假设它存在**。
 
-## Conventions
+## 约定
 
-| Convention | Meaning |
+| 约定 | 含义 |
 | --- | --- |
-| `card_id` | Internal, system-owned key. **Never** an external id. |
-| `NULL` | "Not applicable" for this card (e.g. `race` on a Spell). |
-| Sentinel `-1` | Upstream value meaning a printed `?` ATK/DEF. Kept verbatim, never coerced to 0. |
-| `*_mask` | Raw upstream bitfield, preserved so any import can be re-derived. |
-| `UNKNOWN` | Reserved for effect-layer extraction (see [Effect Schema](#effect-schema)) — never for card fields. |
+| `card_id` | 系统内部自有主键。**永远**不是外部 id。 |
+| `NULL` | 对这张卡「不适用」（例如魔法卡的 `race`）。 |
+| 哨兵值 `-1` | 上游表示卡面上印着 `?` 的 ATK/DEF。原样保留，绝不转成 0。 |
+| `*_mask` | 上游原始位字段，保留下来以便任何导入都能重新推导。 |
+| `UNKNOWN` | 专供 effect 层抽取使用（见 [Effect Schema](#effect-schema)），绝不用于 card 字段。 |
 
 ---
 
 ## `raw_source`
 
-One row per upstream snapshot. Lets any import be reproduced offline.
+每次上游快照一行，让任何一次导入都能离线复现。
 
-| Column | Type | Notes |
+| 列 | 类型 | 说明 |
 | --- | --- | --- |
 | `source_id` | INTEGER PK | |
 | `source_name` | TEXT | `ygopro_cdb` \| `ygoprodeck_json` |
-| `source_version` | TEXT | dump date or file mtime |
-| `uri` / `file_path` | TEXT | where the payload came from |
-| `content_sha256` | TEXT | NULL for on-disk cdb imports |
+| `source_version` | TEXT | dump 日期或文件 mtime |
+| `uri` / `file_path` | TEXT | 数据来源位置 |
+| `content_sha256` | TEXT | 本地 cdb 导入时为 NULL |
 | `payload_bytes` / `record_count` | INTEGER | |
-| `fetched_at` | TEXT | local ISO-8601 |
+| `fetched_at` | TEXT | 本地时间 ISO-8601 |
 
-`UNIQUE (source_name, content_sha256)` makes re-importing the same payload a
-no-op at the source level.
+`UNIQUE (source_name, content_sha256)` 使得重复导入同一份 payload 在 source 层就是空操作。
 
 ## `raw_card_record`
 
-Byte-preserved upstream record, one per card per source.
+逐字节保留的上游记录，每卡每源一行。
 
-| Column | Notes |
+| 列 | 说明 |
 | --- | --- |
 | `raw_id` | PK |
 | `source_id` | FK → `raw_source` |
-| `card_id` | FK → `card`, set after upsert |
-| `external_id` | upstream id, for debugging |
-| `payload_sha256` / `payload_json` | normalized record as JSON |
+| `card_id` | FK → `card`，upsert 之后回填 |
+| `external_id` | 上游 id，便于排查 |
+| `payload_sha256` / `payload_json` | 归一化记录的 JSON |
 
-This is what makes "re-parse without hitting the network" possible.
+这张表是「不联网也能重新解析」的前提。
 
 ## `card`
 
-| Column | Notes |
+| 列 | 说明 |
 | --- | --- |
-| `card_id` | internal PK |
-| `canonical_name` | display name of the primary language |
+| `card_id` | 内部 PK |
+| `canonical_name` | 主语言的展示名 |
 | `card_category` | `MONSTER` \| `SPELL` \| `TRAP` |
 | `sub_category` | `NORMAL` `EFFECT` `FUSION` `RITUAL` `SYNCHRO` `XYZ` `LINK` `PENDULUM` `QUICK_PLAY` `CONTINUOUS` `EQUIP` `FIELD` `COUNTER` `TRAP_MONSTER` `TOKEN` `SKILL` `MAXIMUM` `ARMOR` |
-| `race` | `DRAGON`, `WINGED_BEAST`, `SEA_SERPENT`, … NULL for non-monsters |
+| `race` | `DRAGON`、`WINGED_BEAST`、`SEA_SERPENT` …… 非怪兽为 NULL |
 | `attribute` | `EARTH` `WATER` `FIRE` `WIND` `LIGHT` `DARK` `DIVINE` |
-| `level_rank` | level, or rank for XYZ |
-| `link_rating` | Link Rating; NULL unless LINK |
-| `pendulum_scale` | NULL unless PENDULUM |
-| `atk` / `def` | raw upstream value, `-1` == `?` |
-| `type_mask` etc. | upstream bitfields, verbatim |
-| `alias_passcode` | upstream `alias`; **not** auto-merged (see [Aliases](#aliases)) |
-| `text_lang` / `raw_text` | original effect text — always kept, never overwritten by derived data |
+| `level_rank` | 等级；XYZ 怪物存的是 rank |
+| `link_rating` | 连接值；非 LINK 为 NULL |
+| `pendulum_scale` | 灵摆刻度；非 PENDULUM 为 NULL |
+| `atk` / `def` | 上游原值，`-1` == `?` |
+| `type_mask` 等 | 上游位字段，原样保留 |
+| `alias_passcode` | 上游 `alias`；**不会**自动合并（见下文「别名」一节） |
+| `text_lang` / `raw_text` | 原始效果文本——永远保留，绝不被派生数据覆盖 |
 | `primary_source_id` | FK → `raw_source` |
-| `created_at` / `updated_at` | local ISO-8601 |
+| `created_at` / `updated_at` | 本地时间 ISO-8601 |
 
 ## `card_name`
 
-`(card_id, lang, name_kind, name)` PK.
+主键 `(card_id, lang, name_kind, name)`。
 
-- `name_kind`: `official` \| `localized` \| `alias`
-- `is_primary`: 1 for the name used as `canonical_name`
+- `name_kind`：`official` \| `localized` \| `alias`
+- `is_primary`：1 表示这张卡被用作 `canonical_name` 的那个名字
+
+当前库里只有 `en`；中文 / 日文名属于后续数据源扩展，schema 已预留。
 
 ## `external_id`
 
-`(source, external_id)` PK — this is the only place external identifiers live.
+主键 `(source, external_id)`——外部标识符只允许出现在这里。
 
-| `source` | Meaning |
+| `source` | 含义 |
 | --- | --- |
-| `ygopro_passcode` | the 8-digit passcode used by YGOPro/EDOPro |
-| `ygoprodeck_id` | YGOProDeck numeric id |
-| `konami_cid` | reserved for the official OCG/TCG card id |
+| `ygopro_passcode` | YGOPro / EDOPro 使用的 8 位密码 |
+| `ygoprodeck_id` | YGOProDeck 数字 id |
+| `konami_cid` | 预留，官方 OCG/TCG 卡 id |
 
 ## `card_archetype`
 
-`(card_id, archetype)` PK.
+主键 `(card_id, archetype)`。
 
-- `archetype`: normalized slug (`blue-eyes`)
-- `archetype_raw`: upstream value. For `cards.cdb` this is the 16-bit setcode in
-  hex, because the raw database has no archetype names.
+- `archetype`：归一化 slug（`blue-eyes`）
+- `archetype_raw`：上游原值。对 `cards.cdb` 来说是 16 位 setcode 的十六进制，因为原始库里没有系列名。
 
 ## `card_flag`
 
-`(card_id, flag)` PK. Normalized boolean labels decoded from the type bitmask:
-`TUNER` `PENDULUM` `TOON` `SPIRIT` `UNION` `GEMINI` `FLIP` `TRAP_MONSTER`
-`ARMOR` `MAXIMUM`. Keeps queries free of bit arithmetic.
+主键 `(card_id, flag)`。从 type 位字段解码出的布尔标签：`TUNER` `PENDULUM` `TOON` `SPIRIT` `UNION` `GEMINI` `FLIP` `TRAP_MONSTER` `ARMOR` `MAXIMUM`。查询时不必再做位运算。
 
-## Aliases
+## 别名
 
-Upstream `alias` marks an alternate artwork of an existing card. It is stored in
-`card.alias_passcode` but **never merged automatically**: merging is a curation
-decision, and a wrong upstream value would silently destroy a card. Use
-`id_mapping.alias_report()` to review candidates.
+上游 `alias` 表示同一张卡的异画版本。它存在 `card.alias_passcode` 里，但**绝不自动合并**：合并属于人工整理决策，一个错误的上游值会静默毁掉一张卡。用 `id_mapping.alias_report()` 查看候选。
 
 ---
 
 ## `effect`
 
-One card → many effects. `raw_text` is always kept, so every structured claim
-can be verified against the original wording.
+一张卡 -> 多个效果。`raw_text` 永远保留，因此每条结构化结论都能回到原始措辞核验。
 
-| Column | Notes |
+| 列 | 说明 |
 | --- | --- |
 | `effect_id` | PK |
-| `card_id` | FK → `card`, `ON DELETE CASCADE` |
-| `effect_index` | order within the card; `UNIQUE (card_id, effect_index)` |
+| `card_id` | FK → `card`，`ON DELETE CASCADE` |
+| `effect_index` | 卡内顺序；`UNIQUE (card_id, effect_index)` |
 | `scope` | `MAIN` \| `PENDULUM` \| `MONSTER` |
-| `marker` | how the splitter found it: `BLOCK` `BULLET` `LINE` `SENTENCE` `MATERIAL` |
-| `raw_text` | the exact text slice |
-| `text_sha256` | dedup / change detection |
-| `parser_version` | which parser produced the predicates |
+| `marker` | splitter 如何判定它：`BLOCK` `BULLET` `LINE` `SENTENCE` `MATERIAL` |
+| `raw_text` | 精确的文本切片 |
+| `text_sha256` | 去重 / 变更检测 |
+| `parser_version` | 生成这些谓词的 parser 版本 |
 
-`marker = MATERIAL` marks summoning-material lines ("2 Level 4 monsters").
-They are stored — the text is part of the card — but produce no predicates,
-because a material requirement is not an effect.
+`marker = MATERIAL` 标记召唤素材行（"2 Level 4 monsters"）。它会被存下来——文本本身属于卡面——但不产出任何谓词，因为素材要求不是效果。
 
 ## `effect_predicate`
 
-One atomic claim about one part of one effect.
+关于「某条效果的某个组成部分」的一条原子断言。
 
-| Column | Notes |
+| 列 | 说明 |
 | --- | --- |
 | `part` | `CONDITION` \| `COST` \| `RESOLUTION` \| `RESTRICTION` |
-| `action` | from the `Action` vocabulary; **NULL means UNKNOWN** |
-| `action_known` | 0 = UNKNOWN, 1 = determined. Never infer FALSE from NULL. |
-| `source_zone` / `destination_zone` | from the `Zone` vocabulary |
-| `target_*` | denormalized target columns, purely for indexed SQL filtering |
+| `action` | 取自 `Action` 词表；**NULL 表示 UNKNOWN** |
+| `action_known` | 0 = UNKNOWN，1 = 已判定。绝不能从 NULL 推断出 FALSE。 |
+| `source_zone` / `destination_zone` | 取自 `Zone` 词表 |
+| `target_*` | 反范式化的目标列，纯粹为了走索引做 SQL 过滤 |
 | `target_tuner` | `TRUE` / `FALSE` / `UNKNOWN` |
 | `once_per_turn` | `TRUE` / `FALSE` / `UNKNOWN` |
-| `confidence` | 0–1 heuristic: how much of the clause was understood |
-| `evidence` | the text span the parser matched |
-| `payload_json` | the full structured object — this is the truth, the columns are a mirror |
+| `confidence` | 0–1 启发式分值：这个分句被理解了多少 |
+| `evidence` | parser 实际匹配到的文本片段 |
+| `payload_json` | 完整结构化对象——它才是真相，各列只是镜像 |
 
-### Three-valued semantics
+### 三值语义
 
-| State | Meaning | SQL representation |
+| 状态 | 含义 | SQL 表示 |
 | --- | --- | --- |
-| `TRUE` | explicitly present | `target_tuner = 'TRUE'` |
-| `FALSE` | explicitly negated ("non-Tuner") | `target_tuner = 'FALSE'` |
-| `UNKNOWN` | parser did not determine it | `target_tuner = 'UNKNOWN'` / `action IS NULL` |
+| `TRUE` | 明确存在 | `target_tuner = 'TRUE'` |
+| `FALSE` | 明确否定（"non-Tuner"） | `target_tuner = 'FALSE'` |
+| `UNKNOWN` | parser 没能判定 | `target_tuner = 'UNKNOWN'` / `action IS NULL` |
 
-`UNKNOWN` must never be treated as `FALSE`. A parser failure is not a claim
-about the card.
+`UNKNOWN` 永远不能被当成 `FALSE`。解析失败不是对卡片的断言。
 
-### Vocabularies
+### 词表
 
-`Action`: `SPECIAL_SUMMON` `NORMAL_SUMMON` `TRIBUTE_SUMMON` `ADD_TO_HAND`
+`Action`：`SPECIAL_SUMMON` `NORMAL_SUMMON` `TRIBUTE_SUMMON` `ADD_TO_HAND`
 `SEARCH` `DRAW` `SEND_TO_GRAVEYARD` `BANISH` `DESTROY` `NEGATE`
 `RETURN_TO_HAND` `RETURN_TO_DECK` `TRIBUTE` `DISCARD` `MILL`
 `CHANGE_POSITION` `INCREASE_ATK` `DECREASE_ATK` `EXCAVATE` `REVEAL` `ATTACH`
 `DETACH` `GAIN_CONTROL` `COPY_EFFECT` `EQUIP` `SET_CARD`
 `PREVENT_DESTRUCTION` `PREVENT_ACTIVATION` `CHANGE_NAME` `SHUFFLE`
 
-`Zone`: `DECK` `EXTRA_DECK` `HAND` `GRAVEYARD` `BANISHED` `FIELD`
+`Zone`：`DECK` `EXTRA_DECK` `HAND` `GRAVEYARD` `BANISHED` `FIELD`
 `MONSTER_ZONE` `SPELL_TRAP_ZONE` `PENDULUM_ZONE` `ANYWHERE`
 
-`SEARCH` is the more specific form of `ADD_TO_HAND`: it is emitted when the
-source is the Deck and the destination is the hand.
+`SEARCH` 是 `ADD_TO_HAND` 的更具体形式：当来源为卡组、目标为手牌时才会产出。
 
-`target_card_category` may be `SPELL_TRAP`, which query translation expands to
-`SPELL OR TRAP`.
+`target_card_category` 可能是 `SPELL_TRAP`，查询翻译会把它展开成 `SPELL OR TRAP`。

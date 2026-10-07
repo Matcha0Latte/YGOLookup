@@ -1,15 +1,12 @@
-# Query DSL
+# 查询 DSL（Query DSL）
 
-Natural language is never turned directly into SQL. It becomes a **Query AST**,
-and a retrieval backend compiles that AST into whatever it needs (SQL, FTS5
-MATCH, a vector query). This keeps the planner independent of storage.
+自然语言永远不直接变成 SQL。它先变成 **Query AST**，再由某个检索后端把 AST 编译成自己需要的形式（SQL、FTS5 MATCH、向量查询）。这样 planner 就与存储解耦了。
 
-The AST is plain JSON: serializable, diffable, and usable directly as test
-fixtures.
+AST 是纯 JSON：可序列化、可 diff，也能直接当测试 fixture 用。
 
 ---
 
-## Top level
+## 顶层结构
 
 ```json
 {
@@ -17,37 +14,37 @@ fixtures.
   "limit": 50,
   "offset": 0,
   "min_confidence": 0.0,
-  "where": { ...condition... }
+  "where": { ...条件... }
 }
 ```
 
-| Key | Type | Notes |
+| 键 | 类型 | 说明 |
 | --- | --- | --- |
-| `select` | string | only `"card"` today |
-| `limit` / `offset` | int | paging |
-| `min_confidence` | float | reserved for filtering weakly-parsed predicates |
-| `where` | condition \| omitted | omitted = match everything |
+| `select` | string | 目前只支持 `"card"` |
+| `limit` / `offset` | int | 分页 |
+| `min_confidence` | float | 预留，用于过滤解析置信度过低的谓词 |
+| `where` | 条件 \| 省略 | 省略表示匹配全部 |
 
 ---
 
-## Conditions
+## 条件
 
-Three node types, freely nestable.
+三种节点类型，可自由嵌套。
 
-### Field condition
+### 字段条件
 
 ```json
 { "field": "card.race", "op": "eq", "value": "DRAGON" }
 ```
 
-| Operator | Meaning |
+| 运算符 | 含义 |
 | --- | --- |
-| `eq` / `ne` | equal / not equal. `ne` also matches UNKNOWN (NULL). |
-| `in` / `nin` | value must be a non-empty list. `nin` also matches UNKNOWN. |
-| `lt` `lte` `gt` `gte` | numeric comparison |
-| `contains` | case-insensitive substring (text fields only) |
+| `eq` / `ne` | 等于 / 不等于。`ne` 同时匹配 UNKNOWN（NULL）。 |
+| `in` / `nin` | value 必须是非空列表。`nin` 同时匹配 UNKNOWN。 |
+| `lt` `lte` `gt` `gte` | 数值比较 |
+| `contains` | 大小写无关的子串匹配（仅限文本字段） |
 
-### Boolean condition
+### 布尔条件
 
 ```json
 { "and": [ ... ] }
@@ -55,75 +52,67 @@ Three node types, freely nestable.
 { "not": { ... } }
 ```
 
-`and` / `or` take a non-empty list; `not` takes a single condition.
+`and` / `or` 接收非空列表；`not` 接收单个条件。
 
-### Exists condition
+### 存在条件
 
 ```json
 {
   "exists": "effect",
-  "where": { "and": [ ...predicate conditions... ] }
+  "where": { "and": [ ...谓词条件... ] }
 }
 ```
 
-Means: *the card has at least one effect whose predicates satisfy this*. This is
-how effect-level and card-level constraints are combined, and how COST is kept
-distinct from RESOLUTION.
+含义是：*这张卡至少有一条效果，其谓词满足上述条件*。这是把 effect 级约束与 card 级约束组合起来的方式，也是把 COST 与 RESOLUTION 区分开的方式。
 
 ---
 
-## Fields
+## 字段
 
-Field names are validated against a registry (`query/fields.py`). Unknown names
-are rejected — nothing is interpolated into SQL.
+字段名会对照注册表（`query/fields.py`）校验。未知字段名一律拒绝——**没有任何字符串会被拼进 SQL**。
 
 ### `card.*`
 
-| Field | Type | Notes |
+| 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `card.card_id` | int | |
 | `card.canonical_name` | text | |
 | `card.card_category` | enum | `MONSTER` `SPELL` `TRAP` |
 | `card.sub_category` | enum | `NORMAL` `EFFECT` `FUSION` `RITUAL` `SYNCHRO` `XYZ` `LINK` `PENDULUM` `QUICK_PLAY` `CONTINUOUS` `EQUIP` `FIELD` `COUNTER` `TRAP_MONSTER` `TOKEN` `SKILL` `MAXIMUM` `ARMOR` |
-| `card.race` | enum | `DRAGON` `SPELLCASTER` … (upper snake case) |
+| `card.race` | enum | `DRAGON` `SPELLCASTER` ……（大写下划线） |
 | `card.attribute` | enum | `EARTH` `WATER` `FIRE` `WIND` `LIGHT` `DARK` `DIVINE` |
-| `card.level_rank` | int | level, or rank for XYZ |
+| `card.level_rank` | int | 等级；XYZ 为 rank |
 | `card.link_rating` | int | |
 | `card.pendulum_scale` | int | |
-| `card.atk` / `card.def` | int | `-1` means a printed `?` |
-| `card.archetype` | text | joined table, matched on the normalized slug |
+| `card.atk` / `card.def` | int | `-1` 表示卡面印着 `?` |
+| `card.archetype` | text | 关联表，按归一化 slug 匹配 |
 | `card.flag` | enum | `TUNER` `PENDULUM` `TOON` `SPIRIT` `UNION` `GEMINI` `FLIP` `TRAP_MONSTER` `ARMOR` `MAXIMUM` |
-| `card.name` | text | any name/alias row; `contains` does a LIKE |
+| `card.name` | text | 任意名称 / 别名行；`contains` 走 LIKE |
 
-### `effect.*` (must be inside an `exists` block)
+### `effect.*`（必须位于 `exists` 块内）
 
-| Field | Type | Notes |
+| 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `effect.part` | enum | `CONDITION` `COST` `RESOLUTION` `RESTRICTION` |
-| `effect.action` | enum | see below |
+| `effect.action` | enum | 见下方词表 |
 | `effect.source_zone` | enum | `DECK` `EXTRA_DECK` `HAND` `GRAVEYARD` `BANISHED` `FIELD` `MONSTER_ZONE` `SPELL_TRAP_ZONE` `PENDULUM_ZONE` `ANYWHERE` |
-| `effect.destination_zone` | enum | same vocabulary |
+| `effect.destination_zone` | enum | 同一套词表 |
 | `effect.target_race` | enum | |
 | `effect.target_attribute` | enum | |
 | `effect.target_card_category` | enum | `MONSTER` `SPELL` `TRAP` `SPELL_TRAP` |
 | `effect.target_archetype` / `effect.target_name` | text | |
-| `effect.target_level` | int (virtual) | comparison only |
-| `effect.target_atk` | int (virtual) | comparison only |
+| `effect.target_level` | int（虚拟） | 仅支持比较运算 |
+| `effect.target_atk` | int（虚拟） | 仅支持比较运算 |
 | `effect.target_rank` / `effect.target_link_rating` / `effect.target_count` | int | |
-| `effect.target_tuner` | tri | `TRUE` `FALSE` `UNKNOWN` |
-| `effect.once_per_turn` | tri | `TRUE` `FALSE` `UNKNOWN` |
-| `effect.confidence` | number | parser confidence |
+| `effect.target_tuner` | 三值 | `TRUE` `FALSE` `UNKNOWN` |
+| `effect.once_per_turn` | 三值 | `TRUE` `FALSE` `UNKNOWN` |
+| `effect.confidence` | number | parser 置信度 |
 
-**Virtual range fields.** "Level 4 or lower" is stored as `target_level_max = 4`;
-an exact "Level 4" as `min = max = 4`. `effect.target_level` with `lte` therefore
-compiles to `(min <= ? OR max <= ?)` so both spellings are found. These fields
-support comparison operators only.
+**虚拟区间字段。**「4 星以下」存成 `target_level_max = 4`；精确的「4 星」存成 `min = max = 4`。因此 `effect.target_level` 配 `lte` 会编译成 `(min <= ? OR max <= ?)`，两种写法都能命中。这类字段只支持比较运算符。
 
-**`SPELL_TRAP` asymmetry.** A predicate stored as `SPELL_TRAP` ("Target 1
-Spell/Trap") is matched by a query for `SPELL` or for `TRAP`, but a query for
-`SPELL_TRAP` requires the combined token.
+**`SPELL_TRAP` 的不对称。** 存成 `SPELL_TRAP` 的谓词（"Target 1 Spell/Trap"）会被查 `SPELL` 或查 `TRAP` 的请求命中；但反过来，查 `SPELL_TRAP` 只匹配那个合并标记本身。
 
-**Action vocabulary:** `SPECIAL_SUMMON` `NORMAL_SUMMON` `TRIBUTE_SUMMON`
+**Action 词表：** `SPECIAL_SUMMON` `NORMAL_SUMMON` `TRIBUTE_SUMMON`
 `ADD_TO_HAND` `SEARCH` `DRAW` `SEND_TO_GRAVEYARD` `BANISH` `DESTROY` `NEGATE`
 `RETURN_TO_HAND` `RETURN_TO_DECK` `TRIBUTE` `DISCARD` `MILL` `CHANGE_POSITION`
 `INCREASE_ATK` `DECREASE_ATK` `EXCAVATE` `REVEAL` `ATTACH` `DETACH`
@@ -132,7 +121,7 @@ Spell/Trap") is matched by a query for `SPELL` or for `TRAP`, but a query for
 
 ---
 
-## Examples
+## 示例
 
 ### 4 星以下暗属性恶魔族怪兽
 
@@ -168,7 +157,7 @@ Spell/Trap") is matched by a query for `SPELL` or for `TRAP`, but a query for
 }
 ```
 
-### 以除外墓地怪兽为 COST 特殊召唤
+### 以「除外墓地怪兽」为 COST 并特殊召唤
 
 ```json
 {
@@ -204,34 +193,28 @@ Spell/Trap") is matched by a query for `SPELL` or for `TRAP`, but a query for
 
 ---
 
-## CLI usage
+## CLI 用法
 
 ```bash
-# compact filter syntax (bare names default to card.*, effect.* is auto-wrapped)
+# 紧凑过滤语法（裸字段名默认属于 card.*，effect.* 会自动包成 exists 块）
 python -m ygolookup.cli search --filter race=DRAGON --filter "level<=4"
 python -m ygolookup.cli search --filter effect.action=SPECIAL_SUMMON \
                                --filter effect.source_zone=EXTRA_DECK
 
-# rule-based natural language planner
+# 规则式自然语言 planner
 python -m ygolookup.cli search --nl "找能够从额外卡组特殊召唤龙族怪兽的卡"
 
-# full AST from a file
+# 从文件读入完整 AST
 python -m ygolookup.cli search --query-file query.json --explain
 ```
 
-Aliases in the compact syntax: `level`/`rank` → `card.level_rank`,
-`type` → `card.card_category`, `effect.race` → `effect.target_race`,
-`effect.level` → `effect.target_level`.
+紧凑语法里的别名：`level` / `rank` → `card.level_rank`，`type` → `card.card_category`，
+`effect.race` → `effect.target_race`，`effect.level` → `effect.target_level`。
 
 ---
 
 ## Planner
 
-`query/planner.py` is a **deterministic placeholder** for the LLM planner. It
-recognizes a fixed Chinese + English vocabulary of races, attributes, actions and
-zones, and returns `{query, matched, unmatched}`.
+`query/planner.py` 是 LLM planner 的**确定性占位实现**。它识别一份固定的中英文词表（种族、属性、action、区域），返回 `{query, matched, unmatched}`。
 
-`unmatched` matters: when the planner cannot map part of the question, the
-caller should fall back to FTS or semantic retrieval rather than silently
-dropping the intent. The LLM planner planned for a later phase returns the
-same `Query` object, so nothing downstream changes.
+`unmatched` 很重要：当 planner 无法映射问题中的某一部分时，调用方应当回退到 FTS 或语义检索，而不是悄悄把这段意图丢掉。后续阶段的 LLM planner 返回的是同一个 `Query` 对象，因此下游不需要任何改动。
