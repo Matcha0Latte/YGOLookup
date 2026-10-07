@@ -1,0 +1,3 @@
+# YGOLookup
+
+Initial repository.
