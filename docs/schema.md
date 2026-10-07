@@ -106,15 +106,68 @@ decision, and a wrong upstream value would silently destroy a card. Use
 
 ---
 
-## Effect Schema
+## `effect`
 
-Added in Phase 2 (migration `002_effect.sql`), documented here once landed.
+One card → many effects. `raw_text` is always kept, so every structured claim
+can be verified against the original wording.
 
-| Table | Purpose |
+| Column | Notes |
 | --- | --- |
-| `effect` | one card → many effects, with `raw_text` preserved |
-| `effect_predicate` | structured action / source / target / cost predicates |
+| `effect_id` | PK |
+| `card_id` | FK → `card`, `ON DELETE CASCADE` |
+| `effect_index` | order within the card; `UNIQUE (card_id, effect_index)` |
+| `scope` | `MAIN` \| `PENDULUM` \| `MONSTER` |
+| `marker` | how the splitter found it: `BLOCK` `BULLET` `LINE` `SENTENCE` `MATERIAL` |
+| `raw_text` | the exact text slice |
+| `text_sha256` | dedup / change detection |
+| `parser_version` | which parser produced the predicates |
 
-All extracted values carry a tri-state (`TRUE` / `FALSE` / `UNKNOWN`) so that
-"the parser did not understand this" is never mistaken for "the card does not
-do this".
+`marker = MATERIAL` marks summoning-material lines ("2 Level 4 monsters").
+They are stored — the text is part of the card — but produce no predicates,
+because a material requirement is not an effect.
+
+## `effect_predicate`
+
+One atomic claim about one part of one effect.
+
+| Column | Notes |
+| --- | --- |
+| `part` | `CONDITION` \| `COST` \| `RESOLUTION` \| `RESTRICTION` |
+| `action` | from the `Action` vocabulary; **NULL means UNKNOWN** |
+| `action_known` | 0 = UNKNOWN, 1 = determined. Never infer FALSE from NULL. |
+| `source_zone` / `destination_zone` | from the `Zone` vocabulary |
+| `target_*` | denormalized target columns, purely for indexed SQL filtering |
+| `target_tuner` | `TRUE` / `FALSE` / `UNKNOWN` |
+| `once_per_turn` | `TRUE` / `FALSE` / `UNKNOWN` |
+| `confidence` | 0–1 heuristic: how much of the clause was understood |
+| `evidence` | the text span the parser matched |
+| `payload_json` | the full structured object — this is the truth, the columns are a mirror |
+
+### Three-valued semantics
+
+| State | Meaning | SQL representation |
+| --- | --- | --- |
+| `TRUE` | explicitly present | `target_tuner = 'TRUE'` |
+| `FALSE` | explicitly negated ("non-Tuner") | `target_tuner = 'FALSE'` |
+| `UNKNOWN` | parser did not determine it | `target_tuner = 'UNKNOWN'` / `action IS NULL` |
+
+`UNKNOWN` must never be treated as `FALSE`. A parser failure is not a claim
+about the card.
+
+### Vocabularies
+
+`Action`: `SPECIAL_SUMMON` `NORMAL_SUMMON` `TRIBUTE_SUMMON` `ADD_TO_HAND`
+`SEARCH` `DRAW` `SEND_TO_GRAVEYARD` `BANISH` `DESTROY` `NEGATE`
+`RETURN_TO_HAND` `RETURN_TO_DECK` `TRIBUTE` `DISCARD` `MILL`
+`CHANGE_POSITION` `INCREASE_ATK` `DECREASE_ATK` `EXCAVATE` `REVEAL` `ATTACH`
+`DETACH` `GAIN_CONTROL` `COPY_EFFECT` `EQUIP` `SET_CARD`
+`PREVENT_DESTRUCTION` `PREVENT_ACTIVATION` `CHANGE_NAME` `SHUFFLE`
+
+`Zone`: `DECK` `EXTRA_DECK` `HAND` `GRAVEYARD` `BANISHED` `FIELD`
+`MONSTER_ZONE` `SPELL_TRAP_ZONE` `PENDULUM_ZONE` `ANYWHERE`
+
+`SEARCH` is the more specific form of `ADD_TO_HAND`: it is emitted when the
+source is the Deck and the destination is the hand.
+
+`target_card_category` may be `SPELL_TRAP`, which query translation expands to
+`SPELL OR TRAP`.

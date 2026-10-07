@@ -1,0 +1,164 @@
+{
+  "_comment": "Parser regression fixtures. 'expect' entries are subset matches: at least one predicate must satisfy every field listed. Fields omitted are NOT asserted.",
+  "cases": [
+    {
+      "name": "special_summon_dragon_from_extra_deck",
+      "text": "Special Summon 1 Dragon monster from your Extra Deck.",
+      "expect": [
+        {
+          "part": "RESOLUTION",
+          "action": "SPECIAL_SUMMON",
+          "source": "EXTRA_DECK",
+          "destination": "FIELD",
+          "target": { "race": "DRAGON", "count": 1 }
+        }
+      ]
+    },
+    {
+      "name": "banish_light_from_gy_as_cost",
+      "text": "Banish 1 LIGHT monster from your GY; Special Summon 1 Level 4 or lower Dragon monster from your Deck.",
+      "expect": [
+        { "part": "COST", "action": "BANISH", "source": "GRAVEYARD", "destination": "BANISHED", "target": { "attribute": "LIGHT" } },
+        { "part": "RESOLUTION", "action": "SPECIAL_SUMMON", "source": "DECK", "target": { "race": "DRAGON", "level_max": 4 } }
+      ]
+    },
+    {
+      "name": "search_dark_fiend_from_deck",
+      "text": "If this card is Normal Summoned: You can add 1 Level 4 or lower DARK Fiend monster from your Deck to your hand.",
+      "expect": [
+        { "part": "CONDITION" },
+        { "part": "RESOLUTION", "action": "SEARCH", "source": "DECK", "destination": "HAND", "target": { "attribute": "DARK", "race": "FIEND", "level_max": 4 } }
+      ]
+    },
+    {
+      "name": "discard_cost_then_draw",
+      "text": "Discard 1 card; draw 2 cards.",
+      "expect": [
+        { "part": "COST", "action": "DISCARD", "destination": "GRAVEYARD", "target": { "count": 1 } },
+        { "part": "RESOLUTION", "action": "DRAW", "source": "DECK", "destination": "HAND", "target": { "count": 2 } }
+      ]
+    },
+    {
+      "name": "activation_clause_targets_spell_trap",
+      "text": "Target 1 Spell/Trap on the field; destroy that target.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "DESTROY", "source": "FIELD", "target": { "card_category": "SPELL_TRAP" } }
+      ]
+    },
+    {
+      "name": "return_opponent_monster_to_hand",
+      "text": "Target 1 monster your opponent controls; return it to the hand.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "RETURN_TO_HAND", "destination": "HAND" }
+      ]
+    },
+    {
+      "name": "mill_three_from_deck",
+      "text": "Send the top 3 cards of your Deck to the GY.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "SEND_TO_GRAVEYARD", "source": "DECK", "destination": "GRAVEYARD", "target": { "count": 3 } }
+      ]
+    },
+    {
+      "name": "negate_monster_effect",
+      "text": "When your opponent activates a monster effect: Negate that effect, and if you do, destroy that monster.",
+      "expect": [
+        { "part": "CONDITION" },
+        { "part": "RESOLUTION", "action": "NEGATE" },
+        { "part": "RESOLUTION", "action": "DESTROY" }
+      ]
+    },
+    {
+      "name": "material_line_is_not_an_effect",
+      "text": "2 Level 4 monsters",
+      "no_predicates": true
+    },
+    {
+      "name": "link_material_line_is_not_an_effect",
+      "text": "2+ Effect Monsters",
+      "no_predicates": true
+    },
+    {
+      "name": "pendulum_card_has_two_scopes",
+      "text": "[ Pendulum Effect ] \nYou must control no monsters to activate this card.\n\n[ Monster Effect ] \nOnce per turn: You can discard 1 card; draw 1 card.",
+      "scopes": ["PENDULUM", "MONSTER"],
+      "expect": [
+        { "part": "RESOLUTION", "action": "DRAW" }
+      ]
+    },
+    {
+      "name": "bullets_are_separate_effects",
+      "text": "● Once per turn: You can discard 1 card; draw 1 card. ● You can banish this card from your GY; add 1 monster from your Deck to your hand.",
+      "expect": [
+        { "part": "COST", "action": "DISCARD" },
+        { "part": "RESOLUTION", "action": "DRAW" },
+        { "part": "COST", "action": "BANISH", "source": "GRAVEYARD" },
+        { "part": "RESOLUTION", "action": "SEARCH", "source": "DECK" }
+      ]
+    },
+    {
+      "name": "once_per_turn_restriction_is_recorded",
+      "text": "You can only use this effect of \"Performapal Pendulum Sorcerer\" once per turn.",
+      "expect": [
+        { "part": "RESTRICTION", "once_per_turn": "TRUE" }
+      ]
+    },
+    {
+      "name": "unparsed_action_stays_unknown_not_false",
+      "text": "This card's name becomes \"Blue-Eyes White Dragon\" while on the field.",
+      "expect": [
+        { "part": "RESOLUTION", "action": null }
+      ]
+    },
+    {
+      "name": "non_tuner_is_explicit_false",
+      "text": "Special Summon 1 non-Tuner monster from your Deck.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "SPECIAL_SUMMON", "target": { "tuner": "FALSE" } }
+      ]
+    },
+    {
+      "name": "tuner_is_explicit_true",
+      "text": "Special Summon 1 Dragon Tuner monster from your hand.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "SPECIAL_SUMMON", "source": "HAND", "target": { "race": "DRAGON", "tuner": "TRUE" } }
+      ]
+    },
+    {
+      "name": "atk_upper_bound",
+      "text": "Special Summon 1 monster with 1500 or less ATK from your hand.",
+      "expect": [
+        { "part": "RESOLUTION", "target": { "atk_max": 1500 } }
+      ]
+    },
+    {
+      "name": "link_rating_constraint",
+      "text": "Special Summon 1 Link-2 monster from your Extra Deck.",
+      "expect": [
+        { "part": "RESOLUTION", "target": { "link_rating": 2 } }
+      ]
+    },
+    {
+      "name": "rank_constraint",
+      "text": "Special Summon 1 Rank 4 monster from your Extra Deck.",
+      "expect": [
+        { "part": "RESOLUTION", "target": { "rank": 4 } }
+      ]
+    },
+    {
+      "name": "archetype_from_quoted_name",
+      "text": "Add 1 \"Blue-Eyes\" monster from your Deck to your hand.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "SEARCH", "target": { "archetype": "blue-eyes", "name": "Blue-Eyes" } }
+      ]
+    },
+    {
+      "name": "or_condition_first_branch_is_recorded",
+      "_note": "Known limitation: OR branches are not split into alternative predicates yet; only the first matching race is captured.",
+      "text": "Special Summon 1 Dragon or Warrior monster from your Deck.",
+      "expect": [
+        { "part": "RESOLUTION", "action": "SPECIAL_SUMMON", "source": "DECK", "target": { "race": "DRAGON" } }
+      ]
+    }
+  ]
+}

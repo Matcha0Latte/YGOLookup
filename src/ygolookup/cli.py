@@ -14,6 +14,7 @@ from .config import config
 from .db.connection import connect
 from .db.migrations import apply_migrations
 from .db.repository import card_archetypes, card_external_ids, card_flags, card_names, find_card_by_name, stats
+from .effects.service import build_effects
 from .ingest.service import ingest_from_cdb, ingest_from_ygoprodeck
 
 
@@ -51,6 +52,58 @@ def cmd_ingest(args) -> int:
 def cmd_stats(args) -> int:
     conn = _open_db(args)
     print(json.dumps(stats(conn), indent=2))
+    conn.close()
+    return 0
+
+
+def cmd_effects(args) -> int:
+    """Split + parse card text into structured effects."""
+    conn = _open_db(args)
+    card_ids = None
+    if args.name:
+        row = find_card_by_name(conn, args.name, exact=not args.fuzzy)
+        if row is None:
+            print(f"no card matching {args.name!r}", file=sys.stderr)
+            return 1
+        card_ids = [row["card_id"]]
+
+    result = build_effects(conn, card_ids=card_ids)
+    print(json.dumps(result.as_dict(), indent=2, ensure_ascii=False))
+    conn.close()
+    return 0
+
+
+def cmd_effects_show(args) -> int:
+    """Print the parsed effects of a single card."""
+    conn = _open_db(args)
+    row = find_card_by_name(conn, args.name, exact=not args.fuzzy)
+    if row is None:
+        print(f"no card matching {args.name!r}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "card_id": row["card_id"],
+        "name": row["canonical_name"],
+        "effects": [
+            {
+                "index": e["effect_index"],
+                "scope": e["scope"],
+                "marker": e["marker"],
+                "raw_text": e["raw_text"],
+                "predicates": [
+                    json.loads(p["payload_json"])
+                    for p in conn.execute(
+                        "SELECT payload_json FROM effect_predicate WHERE effect_id = ? ORDER BY predicate_id",
+                        (e["effect_id"],),
+                    )
+                ],
+            }
+            for e in conn.execute(
+                "SELECT * FROM effect WHERE card_id = ? ORDER BY effect_index", (row["card_id"],)
+            )
+        ],
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
     conn.close()
     return 0
 
@@ -100,6 +153,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_stats = sub.add_parser("stats", help="database statistics")
     p_stats.set_defaults(func=cmd_stats)
+
+    p_effects = sub.add_parser("effects", help="build structured effects from card text")
+    p_effects.add_argument("--name", default=None, help="only (re)build this card")
+    p_effects.add_argument("--fuzzy", action="store_true")
+    p_effects.set_defaults(func=cmd_effects)
+
+    p_show = sub.add_parser("effects-show", help="show parsed effects of one card")
+    p_show.add_argument("name")
+    p_show.add_argument("--fuzzy", action="store_true")
+    p_show.set_defaults(func=cmd_effects_show)
 
     p_card = sub.add_parser("card", help="look up a single card")
     p_card.add_argument("name")
