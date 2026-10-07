@@ -1,114 +1,142 @@
-"""Schema / enum validation for parsed effects.
+"""Validation of parsed effects.
 
-The parser is allowed to be wrong; the validator's job is to make "wrong but
-well-formed" impossible. It reports problems instead of silently repairing
-them, so parser regressions show up in tests.
+The validator is the last layer before anything is written. It exists so a
+parser failure can never be stored as a claim about a card.
+
+It checks:
+
+* every enum value comes from the ontology
+* numeric comparisons are well formed
+* COST clauses only carry payable actions
+* UNKNOWN stays UNKNOWN (a missing action is not a contradiction)
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .lexicon import COST_ACTIONS
 from .ontology import (
-    ATTRIBUTE_VOCABULARY,
-    RACE_VOCABULARY,
     Action,
-    EffectPart,
-    Tri,
+    ClauseRole,
+    ExtractedBy,
+    ParseStatus,
+    Subject,
+    UnitKind,
     Zone,
 )
-from .schema import EffectPredicate, ParsedEffect
+from .predicates import ParsedUnit, Predicate
+from .selector import CardSelector
 
-VALID_TARGET_CATEGORIES = frozenset({"MONSTER", "SPELL", "TRAP", "SPELL_TRAP"})
+__all__ = [
+    "ValidationIssue",
+    "validate_predicate",
+    "validate_unit",
+    "validate_parsed_units",
+    "has_errors",
+]
+
+VALID_OPS = frozenset({"<=", ">=", "==", "<", ">"})
+VALID_CARD_TYPES = frozenset({"MONSTER", "SPELL", "TRAP", "SPELL_TRAP"})
 
 
 @dataclass
 class ValidationIssue:
-    level: str  # error | warning
+    level: str  # "error" | "warning"
     message: str
+    context: str = ""
 
     def __str__(self) -> str:
-        return f"[{self.level}] {self.message}"
+        prefix = f"[{self.context}] " if self.context else ""
+        return f"{prefix}{self.message}"
 
 
-def validate_predicate(predicate: EffectPredicate) -> list[ValidationIssue]:
+def _validate_selector(selector: CardSelector, issues: list[ValidationIssue], context: str) -> None:
+    for name in ("level", "rank", "link_rating", "atk", "defense"):
+        constraint = getattr(selector, name)
+        if constraint is None:
+            continue
+        if constraint.op not in VALID_OPS:
+            issues.append(ValidationIssue("error", f"{name} has invalid op {constraint.op!r}", context))
+        if not isinstance(constraint.value, int):
+            issues.append(ValidationIssue("error", f"{name} value must be int", context))
+    if selector.card_type not in VALID_CARD_TYPES and selector.card_type is not None:
+        issues.append(ValidationIssue("error", f"bad card_type {selector.card_type!r}", context))
+
+
+def validate_predicate(
+    predicate: Predicate, context: str = "", role: ClauseRole | None = None
+) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
 
-    if not isinstance(predicate.part, EffectPart):
-        issues.append(ValidationIssue("error", f"part must be an EffectPart, got {predicate.part!r}"))
-
     if predicate.action is not None and not isinstance(predicate.action, Action):
-        issues.append(ValidationIssue("error", f"unknown action {predicate.action!r}"))
+        issues.append(ValidationIssue("error", f"action is not an Action: {predicate.action!r}", context))
+    if predicate.action_known and predicate.action is None:
+        issues.append(ValidationIssue("error", "action_known is True but action is None", context))
+    if not predicate.action_known and predicate.action is not None:
+        issues.append(ValidationIssue("warning", "action present but action_known is False", context))
 
-    for field_name in ("source", "destination"):
-        value = getattr(predicate, field_name)
-        if value is not None and not isinstance(value, Zone):
-            issues.append(ValidationIssue("error", f"unknown {field_name} zone {value!r}"))
+    for name in ("source_zone", "destination_zone"):
+        zone = getattr(predicate, name)
+        if zone is not None and not isinstance(zone, Zone):
+            issues.append(ValidationIssue("error", f"{name} is not a Zone: {zone!r}", context))
 
-    target = predicate.target
-    if target.race is not None and target.race not in set(RACE_VOCABULARY.values()):
-        issues.append(ValidationIssue("error", f"unknown race {target.race!r}"))
-    if target.attribute is not None and target.attribute not in set(ATTRIBUTE_VOCABULARY.values()):
-        issues.append(ValidationIssue("error", f"unknown attribute {target.attribute!r}"))
-    if target.card_category is not None and target.card_category not in VALID_TARGET_CATEGORIES:
-        issues.append(ValidationIssue("error", f"unknown target category {target.card_category!r}"))
+    if not isinstance(predicate.subject, Subject):
+        issues.append(ValidationIssue("error", f"bad subject {predicate.subject!r}", context))
 
-    if target.level_min is not None and target.level_max is not None and target.level_min > target.level_max:
-        issues.append(
-            ValidationIssue("error", f"level_min {target.level_min} > level_max {target.level_max}")
-        )
-    if target.atk_min is not None and target.atk_max is not None and target.atk_min > target.atk_max:
-        issues.append(ValidationIssue("error", f"atk_min {target.atk_min} > atk_max {target.atk_max}"))
-
-    for tri_field in ("tuner", "pendulum", "effect_monster", "token"):
-        value = getattr(target, tri_field)
-        if value not in tuple(Tri):
-            issues.append(ValidationIssue("error", f"target.{tri_field} must be Tri, got {value!r}"))
-
-    if predicate.once_per_turn not in tuple(Tri):
-        issues.append(ValidationIssue("error", f"once_per_turn must be Tri, got {predicate.once_per_turn!r}"))
+    if predicate.extracted_by not in tuple(ExtractedBy):
+        issues.append(ValidationIssue("error", f"bad extracted_by {predicate.extracted_by!r}", context))
 
     if not 0.0 <= predicate.confidence <= 1.0:
-        issues.append(ValidationIssue("error", f"confidence out of range: {predicate.confidence}"))
+        issues.append(ValidationIssue("error", f"confidence out of range: {predicate.confidence}", context))
 
-    # Semantic sanity checks (non-fatal).
-    if predicate.action is None and predicate.confidence > 0.5:
+    # Semantic sanity (non-fatal).
+    if role is ClauseRole.COST and predicate.action is not None and predicate.action not in COST_ACTIONS:
         issues.append(
-            ValidationIssue("warning", "confidence > 0.5 but the action was not determined")
+            ValidationIssue("warning", f"{predicate.action.value} parsed as COST — check clause split", context)
         )
-    if predicate.action is Action.SPECIAL_SUMMON and predicate.source is None:
-        issues.append(
-            ValidationIssue("warning", "SPECIAL_SUMMON without a source zone — recall may be incomplete")
-        )
-    if predicate.part is EffectPart.COST and predicate.action is not None:
-        cost_like = {
-            Action.BANISH,
-            Action.DISCARD,
-            Action.TRIBUTE,
-            Action.SEND_TO_GRAVEYARD,
-            Action.DETACH,
-            Action.MILL,
-            Action.REVEAL,
-            Action.SHUFFLE,
-            Action.RETURN_TO_HAND,
-            Action.RETURN_TO_DECK,
-        }
-        if predicate.action not in cost_like:
-            issues.append(
-                ValidationIssue("warning", f"{predicate.action.value} parsed as COST — check clause split")
-            )
+    if not predicate.action_known and predicate.confidence > 0.5:
+        issues.append(ValidationIssue("warning", "confidence > 0.5 but action was not determined", context))
+
+    _validate_selector(predicate.object, issues, context)
+    return issues
+
+
+def validate_unit(parsed: ParsedUnit) -> list[ValidationIssue]:
+    context = f"unit[{parsed.unit.index}]"
+    issues: list[ValidationIssue] = []
+
+    if parsed.unit.kind is UnitKind.MATERIAL and parsed.clauses:
+        issues.append(ValidationIssue("error", "material line produced clauses", context))
+
+    if not parsed.unit.raw_text.strip():
+        issues.append(ValidationIssue("error", "unit has no raw text", context))
+
+    for parsed_clause in parsed.clauses:
+        clause_context = f"{context}.clause[{parsed_clause.clause.index}]"
+        clause = parsed_clause.clause
+        if not isinstance(clause.role, ClauseRole):
+            issues.append(ValidationIssue("error", "clause role is not a ClauseRole", clause_context))
+        if not clause.raw_text.strip():
+            issues.append(ValidationIssue("warning", "empty clause text", clause_context))
+        if clause.start > clause.end:
+            issues.append(ValidationIssue("error", "clause span is inverted", clause_context))
+        for predicate in parsed_clause.predicates:
+            issues.extend(validate_predicate(predicate, clause_context, clause.role))
 
     return issues
 
 
-def validate_parsed_effect(parsed: ParsedEffect) -> list[ValidationIssue]:
+def validate_parsed_units(units: list[ParsedUnit]) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
-    if not parsed.segment.raw_text.strip():
-        issues.append(ValidationIssue("error", "effect segment has no raw text"))
-    for predicate in parsed.predicates:
-        issues.extend(validate_predicate(predicate))
+    for parsed in units:
+        issues.extend(validate_unit(parsed))
     return issues
 
 
 def has_errors(issues: list[ValidationIssue]) -> bool:
     return any(issue.level == "error" for issue in issues)
+
+
+def status_of(parsed: ParsedUnit) -> ParseStatus:
+    return parsed.status
