@@ -1,0 +1,55 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.eggs/
+.pytest_cache/
+tests/.tmp/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------- Virtualenv ----------
+.venv/
+venv/
+env/
+
+# ---------- Environment / secrets ----------
+.env
+.env.*
+!.env.example
+*.token
+secrets/
+
+# ---------- Generated data (never commit) ----------
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+*.cdb
+data/**/*.json
+!data/**/.gitkeep
+
+# ---------- Embedding / model artifacts ----------
+models/
+*.bin
+*.onnx
+*.gguf
+*.npy
+*.npz
+*.faiss
+vector_store/
+
+# ---------- Editors / OS ----------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
