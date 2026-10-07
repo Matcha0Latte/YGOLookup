@@ -37,6 +37,9 @@ _GLOBAL_RESTRICTION = re.compile(
     r"(?:这个卡名|「[^」]+」)[^。]*?1回合(?:各能|只能|仅能|各只能)使用\d*次"
 )
 
+# Summoning conditions and rule text are restrictions, not effects.
+_PURE_RESTRICTION = re.compile(r"不能通常召唤|只能有1只表侧表示存在|在规则上当作")
+
 # "衍生物2只" / "2只效果怪兽" / "调整＋1只以上调整以外的怪兽"
 _MATERIAL_LOOK = re.compile(r"^[^\n。：①]*[＋+][^\n。：①]*$|^(?:\d+只以上|[^\n。：①]{0,20})(?:怪兽|衍生物|调整)[^\n。：①]{0,10}$")
 
@@ -79,11 +82,17 @@ def _is_material_line(line: str) -> bool:
 
 
 def _is_global_restriction(line: str) -> bool:
+    """Whether an unnumbered block is card-wide rule text rather than an effect.
+
+    The `发动` guard matters: 「1回合1次，把1张手卡丢弃才能发动。…」 is a real
+    effect that happens to be unnumbered, while 「这个卡名的效果1回合只能使用
+    1次」 or 「这张卡不能通常召唤」 applies to the whole card.
+    """
     if NUMBER_MARKER_PATTERN.match(line):
         return False
-    return bool(_GLOBAL_RESTRICTION.search(line)) or bool(
-        any(p.search(line) for p in RESTRICTION_PATTERNS if "1回合" in p.pattern)
-    )
+    if "发动" in line:
+        return False
+    return bool(_GLOBAL_RESTRICTION.search(line) or _PURE_RESTRICTION.search(line))
 
 
 def _split_numbered(text: str) -> list[tuple[str | None, str]]:

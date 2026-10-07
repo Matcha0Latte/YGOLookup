@@ -14,6 +14,7 @@ so it produces several predicates. Each predicate keeps:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from .clauses import Clause, split_clauses
@@ -63,6 +64,12 @@ _RESULT_PRODUCING = frozenset(
 # Chinese anaphora that points back at something a previous clause produced.
 # 「这张卡」means the card itself, so it is deliberately NOT anaphora.
 _ANAPHORA = ("那只", "那张", "那些", "那个", "其效果", "其")
+
+# Clause roles that owe us an action. A CONDITION or TARGET clause is complete
+# with just a state or an object, so a missing action there is not a failure.
+_ACTION_REQUIRED_ROLES = frozenset(
+    {ClauseRole.RESOLUTION, ClauseRole.COST, ClauseRole.UNKNOWN}
+)
 
 
 @dataclass
@@ -125,10 +132,18 @@ class ParsedUnit:
         if self.unit.kind in (UnitKind.MATERIAL, UnitKind.RESTRICTION):
             return ParseStatus.OK
 
-        predicates = [p for c in self.clauses for p in c.predicates]
+        # CONDITION / TARGET / RESTRICTION clauses describe a state or an object
+        # and are complete without an action; a missing action there is not a
+        # parser failure. Only RESOLUTION / COST / UNKNOWN owe us an action.
+        predicates = [
+            p
+            for c in self.clauses
+            for p in c.predicates
+            if c.clause.role in _ACTION_REQUIRED_ROLES
+        ]
         if not predicates:
             return ParseStatus.UNRESOLVED
-        known = [p for p in predicates if p.action_known]
+        known = [p for p in predicates if _resolved(p)]
         if not known:
             return ParseStatus.UNRESOLVED
         return ParseStatus.OK if len(known) == len(predicates) else ParseStatus.PARTIAL
@@ -139,6 +154,16 @@ class ParsedUnit:
             "status": self.status.value,
             "clauses": [c.to_dict() for c in self.clauses],
         }
+
+
+def _resolved(predicate: "Predicate") -> bool:
+    """Whether a predicate says something definite.
+
+    Two ways to be definite: we recognised the action, or we recognised that
+    the action is *negated* ("这张卡不能通常召唤" is a resolved fact, not a
+    parser failure).
+    """
+    return predicate.action_known or "negated_action" in predicate.modifiers
 
 
 def _detect_subject(text: str) -> Subject:
@@ -164,17 +189,35 @@ def _confidence(action: Action | None, source: Zone | None, destination: Zone | 
     return round(min(score, 1.0), 3)
 
 
+_SEPARATORS = re.compile(r"[，,；;]")
+
+
 def _window(masked: str, actions: list, position: int) -> tuple[int, int]:
     """Text slice belonging to one action.
 
     Chinese puts the object *in front of* the verb ("把墓地的1只光属性怪兽除
     外"), so the slice has to start at the previous action rather than at this
-    one. It ends at the next action so two actions in one clause do not share a
-    noun phrase.
+    one, and it ends at the next action so two actions in one clause do not
+    share a noun phrase.
+
+    Both edges are then pulled in to the nearest comma: in
+    「自己从卡组抽1张卡，那之后自己墓地的1只怪兽除外。」 the DRAW object must
+    stop at the comma, otherwise it picks up the monster that belongs to the
+    banish.
     """
     start = actions[position - 1][2] if position > 0 else 0
     stop = actions[position + 1][1] if position + 1 < len(actions) else len(masked)
-    return start, min(max(stop, start), len(masked))
+    stop = min(max(stop, start), len(masked))
+
+    action_start, action_end = actions[position][1], actions[position][2]
+    head = list(_SEPARATORS.finditer(masked, start, action_start))
+    if head:
+        start = head[-1].end()
+    tail = _SEPARATORS.search(masked, action_end, stop)
+    if tail:
+        # Match offsets are absolute, not relative to the search start.
+        stop = tail.start()
+    return start, max(stop, start)
 
 
 def parse_clause(clause: Clause, *, unit: EffectUnit | None = None) -> ParsedClause:
@@ -282,23 +325,32 @@ def _wire_references(parsed: ParsedUnit) -> None:
     """Link a produced object to a later clause that refers back to it.
 
     Deliberately narrow: the reference must live in a **different clause** than
-    the producer, and that clause must *start* with an anaphora. This matches
+    the antecedent, and that clause must *start* with an anaphora. This matches
     the shape 「特殊召唤1只怪兽。那只怪兽的效果无效。」 without producing
     nonsense for 「那只怪兽回到手卡，这张卡从手卡特殊召唤。」, where both
-    actions sit in one clause and 「这只卡」means the card itself.
+    actions sit in one clause and 「这张卡」means the card itself.
+
+    An antecedent is either a TARGET clause (「以…为对象」 — the object is
+    named there, not produced) or a result-producing action.
 
     Full rule-graph reasoning is out of scope for v1.
     """
     for position, parsed_clause in enumerate(parsed.clauses):
-        producer = next((p for p in parsed_clause.predicates if p.action in _RESULT_PRODUCING), None)
-        if producer is None:
+        if parsed_clause.clause.role is ClauseRole.TARGET:
+            antecedent = parsed_clause.predicates[0] if parsed_clause.predicates else None
+        else:
+            antecedent = next(
+                (p for p in parsed_clause.predicates if p.action in _RESULT_PRODUCING), None
+            )
+        if antecedent is None:
             continue
 
         for later in parsed.clauses[position + 1 :]:
             head = later.clause.raw_text.strip()
             if not any(head.startswith(token) for token in _ANAPHORA):
                 continue
-            producer.result_ref = "ref_1"
+            ref = f"ref_{position + 1}"
+            antecedent.result_ref = ref
             for predicate in later.predicates:
-                predicate.object_ref = "ref_1"
+                predicate.object_ref = ref
             break

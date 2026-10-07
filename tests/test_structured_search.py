@@ -17,16 +17,14 @@ from ygolookup.query.parser import parse_filters
 from ygolookup.query.dsl import ExistsCondition
 from ygolookup.retrieval.structured.search import StructuredSearcher
 
-FIXTURE = Path(__file__).parent / "fixtures" / "search_fixture.json"
-RAW = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
+from conftest import load_fixture_pool
 
 
 @pytest.fixture(scope="module")
 def conn():
     connection = connect(Path(__file__).parent / ".tmp" / "search.db")
     apply_migrations(connection)
-    records = [normalize_ygoprodeck_record(raw) for raw in RAW]
-    ingest_records(connection, records, source_name="test_fixture", source_version="1")
+    load_fixture_pool(connection)
     build_effects(connection)
     connection.commit()
     yield connection
@@ -102,7 +100,7 @@ def test_special_summon_from_extra_deck_targeting_dragon(conn):
         _exists(
             FieldCondition("effect.action", "eq", "SPECIAL_SUMMON"),
             FieldCondition("effect.source_zone", "eq", "EXTRA_DECK"),
-            FieldCondition("effect.target_race", "eq", "DRAGON"),
+            FieldCondition("effect.object_race", "eq", "DRAGON"),
         ),
     )
     assert names(result) == ["Testcase Dragon Alpha"]
@@ -112,7 +110,7 @@ def test_banish_from_graveyard_as_cost(conn):
     result = hits(
         conn,
         _exists(
-            FieldCondition("effect.part", "eq", "COST"),
+            FieldCondition("clause.role", "eq", "COST"),
             FieldCondition("effect.action", "eq", "BANISH"),
             FieldCondition("effect.source_zone", "eq", "GRAVEYARD"),
         ),
@@ -125,14 +123,14 @@ def test_cost_and_resolution_are_distinguishable(conn):
     as_cost = hits(
         conn,
         _exists(
-            FieldCondition("effect.part", "eq", "COST"),
+            FieldCondition("clause.role", "eq", "COST"),
             FieldCondition("effect.action", "eq", "BANISH"),
         ),
     )
     as_resolution = hits(
         conn,
         _exists(
-            FieldCondition("effect.part", "eq", "RESOLUTION"),
+            FieldCondition("clause.role", "eq", "RESOLUTION"),
             FieldCondition("effect.action", "eq", "BANISH"),
         ),
     )
@@ -140,21 +138,21 @@ def test_cost_and_resolution_are_distinguishable(conn):
 
 
 def test_virtual_level_range_on_target(conn):
-    """'Level 4 or lower' is stored as level_max=4 and must be found by lte."""
-    result = hits(conn, _exists(FieldCondition("effect.target_level", "lte", 4)))
+    """'4星以下' is stored as {op: '<=', value: 4} and must be found by lte."""
+    result = hits(conn, _exists(FieldCondition("effect.object_level", "lte", 4)))
     assert "Testcase Big Dragon" in names(result)
 
 
 def test_spell_trap_category_is_stored_as_one_token(conn):
     result = hits(
-        conn, _exists(FieldCondition("effect.target_card_category", "eq", "SPELL_TRAP"))
+        conn, _exists(FieldCondition("effect.object_card_type", "eq", "SPELL_TRAP"))
     )
     assert names(result) == ["Testcase Mystic Spell"]
 
 
 def test_querying_spell_also_matches_spell_trap(conn):
     """'Target 1 Spell/Trap' is an effect that targets Spells."""
-    result = hits(conn, _exists(FieldCondition("effect.target_card_category", "eq", "SPELL")))
+    result = hits(conn, _exists(FieldCondition("effect.object_card_type", "eq", "SPELL")))
     assert names(result) == ["Testcase Mystic Spell"]
 
 
@@ -170,7 +168,7 @@ def test_destination_zone(conn):
 
 
 def test_once_per_turn_tri_state(conn):
-    result = hits(conn, _exists(FieldCondition("effect.once_per_turn", "eq", "TRUE")))
+    result = hits(conn, _exists(FieldCondition("clause.once_per_turn", "eq", "TRUE")))
     assert names(result) == []  # no fixture card says "Once per turn"
 
 
@@ -217,7 +215,7 @@ def test_hits_carry_matched_effect_text(conn):
         ),
     )
     effect = result.hits[0].matched_effects[0]
-    assert "Extra Deck" in effect.raw_text
+    assert "额外卡组" in effect.raw_text
     assert effect.predicates, "predicates are needed to verify the match"
 
 

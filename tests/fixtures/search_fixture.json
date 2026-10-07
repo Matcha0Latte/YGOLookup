@@ -1,5 +1,5 @@
 {
-  "_comment": "Small card pool tuned for structured-search assertions. Same shape as a YGOProDeck dump so the normal ingest path can load it.",
+  "_comment": "Small card pool tuned for structured-search assertions. Same shape as a YGOProDeck dump so the normal ingest path can load it. `zh_desc` is the Simplified Chinese text the effect parser reads.",
   "data": [
     {
       "id": 10000001,
@@ -7,6 +7,7 @@
       "type": "Effect Monster",
       "frameType": "effect",
       "desc": "Banish 1 LIGHT monster from your GY; Special Summon 1 Dragon monster from your Extra Deck.",
+      "zh_desc": "把墓地的1只光属性怪兽除外才能发动。从额外卡组特殊召唤1只龙族怪兽。",
       "atk": 1800,
       "def": 1200,
       "level": 4,
@@ -20,6 +21,7 @@
       "type": "Effect Monster",
       "frameType": "effect",
       "desc": "If this card is Normal Summoned: You can add 1 DARK monster from your Deck to your hand.",
+      "zh_desc": "这张卡召唤成功时才能发动。从卡组把1只暗属性怪兽加入手卡。",
       "atk": 1000,
       "def": 1000,
       "level": 3,
@@ -34,6 +36,7 @@
       "type": "Spell Card",
       "frameType": "spell",
       "desc": "Target 1 Spell/Trap on the field; destroy that target.",
+      "zh_desc": "以场上1张魔法·陷阱卡为对象才能发动。那张卡破坏。",
       "race": "Quick-Play",
       "card_images": [{ "id": 10000003 }]
     },
@@ -43,6 +46,7 @@
       "type": "Tuner Monster",
       "frameType": "effect",
       "desc": "Discard 1 card; draw 2 cards.",
+      "zh_desc": "把1张手卡丢弃才能发动。自己从卡组抽2张卡。",
       "atk": 1300,
       "def": 500,
       "level": 4,
@@ -56,6 +60,7 @@
       "type": "Effect Monster",
       "frameType": "effect",
       "desc": "Special Summon 1 Level 4 or lower monster from your hand.",
+      "zh_desc": "从手卡特殊召唤1只4星以下的怪兽。",
       "atk": 2600,
       "def": 2000,
       "level": 8,
@@ -69,6 +74,7 @@
       "type": "Trap Card",
       "frameType": "trap",
       "desc": "When a monster would be Summoned: Negate the Summon, and if you do, destroy that monster.",
+      "zh_desc": "怪兽召唤成功时才能发动。那个召唤无效，那只怪兽破坏。",
       "race": "Counter",
       "card_images": [{ "id": 10000006 }]
     },
@@ -78,6 +84,7 @@
       "type": "Effect Monster",
       "frameType": "effect",
       "desc": "You can banish 1 monster from your GY; add 1 monster from your Deck to your hand.",
+      "zh_desc": "把墓地的1只怪兽除外才能发动。从卡组把1只怪兽加入手卡。",
       "atk": 900,
       "def": 900,
       "level": 2,

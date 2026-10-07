@@ -80,7 +80,7 @@ def test_numeric_field_rejects_string():
 def test_virtual_range_field_only_supports_comparisons():
     from ygolookup.query.fields import assert_range_supported
 
-    spec = get_field("effect.target_level")
+    spec = get_field("effect.object_level")
     assert_range_supported(spec, "lte")  # ok
     with pytest.raises(QueryError):
         assert_range_supported(spec, "eq")

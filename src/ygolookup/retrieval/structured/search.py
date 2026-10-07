@@ -19,8 +19,16 @@ from .compiler import compile_card_query, compile_count_query, compile_effect_ma
 
 @dataclass
 class MatchedEffect:
-    effect_id: int
+    """An effect unit that produced the match.
+
+    One unit = one numbered effect (①②③) or one global restriction. Its
+    predicates are collected across all of its clauses, so the caller sees the
+    whole effect rather than the single clause that happened to match.
+    """
+
+    unit_id: int
     index: int
+    kind: str
     scope: str
     marker: str
     raw_text: str
@@ -28,8 +36,9 @@ class MatchedEffect:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "effect_id": self.effect_id,
+            "effect_id": self.unit_id,
             "index": self.index,
+            "kind": self.kind,
             "scope": self.scope,
             "marker": self.marker,
             "raw_text": self.raw_text,
@@ -138,8 +147,9 @@ class StructuredSearcher:
         for row in self.conn.execute(compiled.sql, compiled.params):
             by_card[int(row["card_id"])].append(
                 MatchedEffect(
-                    effect_id=int(row["effect_id"]),
-                    index=int(row["effect_index"]),
+                    unit_id=int(row["unit_id"]),
+                    index=int(row["unit_index"]),
+                    kind=row["kind"],
                     scope=row["scope"],
                     marker=row["marker"],
                     raw_text=row["raw_text"],
@@ -153,18 +163,20 @@ class StructuredSearcher:
             hit.matched_effects = by_card.get(hit.card_id, [])
 
     def _attach_predicates(self, by_card: dict[int, list[MatchedEffect]]) -> None:
-        effect_ids = [e.effect_id for effects in by_card.values() for e in effects]
-        if not effect_ids:
+        unit_ids = [e.unit_id for effects in by_card.values() for e in effects]
+        if not unit_ids:
             return
-        placeholders = ",".join("?" for _ in effect_ids)
+        placeholders = ",".join("?" for _ in unit_ids)
         rows = self.conn.execute(
-            f"SELECT effect_id, payload_json FROM effect_predicate "
-            f"WHERE effect_id IN ({placeholders}) ORDER BY effect_id, predicate_id",
-            effect_ids,
+            f"SELECT cl.unit_id AS unit_id, p.payload_json AS payload_json "
+            f"FROM effect_clause cl JOIN effect_predicate p ON p.clause_id = cl.clause_id "
+            f"WHERE cl.unit_id IN ({placeholders}) "
+            f"ORDER BY cl.unit_id, cl.clause_index, p.pred_index",
+            unit_ids,
         )
         payloads: dict[int, list[dict[str, Any]]] = {}
         for row in rows:
-            payloads.setdefault(int(row["effect_id"]), []).append(json.loads(row["payload_json"]))
+            payloads.setdefault(int(row["unit_id"]), []).append(json.loads(row["payload_json"]))
         for effects in by_card.values():
             for effect in effects:
-                effect.predicates = payloads.get(effect.effect_id, [])
+                effect.predicates = payloads.get(effect.unit_id, [])

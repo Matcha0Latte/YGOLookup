@@ -1,0 +1,77 @@
+{
+  "_comment": "Simplified-Chinese OCG text regression cases. `zh_desc` is the source; the parser must never see English. Each case is exercised by tests/test_zh_effects.py. Wording follows the 第九期 OCG text standard: cost is written before 「发动」, the effect after it.",
+  "cases": [
+    {
+      "case": "basic_attribute_restriction",
+      "name": "回归-属性等级限制",
+      "zh_desc": "①：从卡组把1只4星以下的暗属性怪兽加入手卡。",
+      "note": "对象是 4星以下 + 暗属性；来源是卡组、目的地是手卡。"
+    },
+    {
+      "case": "special_summon_from_deck",
+      "name": "回归-从卡组特殊召唤",
+      "zh_desc": "①：从卡组特殊召唤1只龙族怪兽。",
+      "note": "source_zone = DECK，对象是龙族。"
+    },
+    {
+      "case": "special_summon_from_extra_deck",
+      "name": "回归-从额外卡组特殊召唤",
+      "zh_desc": "①：从额外卡组特殊召唤1只龙族怪兽。",
+      "note": "「额外卡组」不能被降级成「卡组」。"
+    },
+    {
+      "case": "banish_from_graveyard_as_cost",
+      "name": "回归-墓地除外作为cost",
+      "zh_desc": "①：把墓地的1只光属性怪兽除外才能发动。从额外卡组特殊召唤1只龙族怪兽。",
+      "note": "除外在「发动」之前 => COST；特殊召唤在「发动」之后 => RESOLUTION。"
+    },
+    {
+      "case": "condition_is_not_cost",
+      "name": "回归-条件不是cost",
+      "zh_desc": "①：自己场上没有怪兽存在的场合才能发动。这张卡从手卡特殊召唤。",
+      "note": "「没有怪兽存在的场合」是 CONDITION，不是 COST —— 不能只凭「才能发动」分。"
+    },
+    {
+      "case": "multiple_resolutions",
+      "name": "回归-多个resolution",
+      "zh_desc": "①：这张卡召唤成功时才能发动。自己从卡组抽1张卡，那之后自己墓地的1只怪兽除外。",
+      "note": "一个 RESOLUTION 子句里有 DRAW 和 BANISH 两个 predicate。"
+    },
+    {
+      "case": "multi_effect_card",
+      "name": "回归-多效果卡",
+      "zh_desc": "①：这张卡召唤成功时才能发动。自己从卡组抽1张卡。②：把这张卡解放才能发动。从卡组把1只恶魔族怪兽加入手卡。",
+      "note": "必须切成 ① ② 两个 EffectUnit。"
+    },
+    {
+      "case": "global_restriction",
+      "name": "回归-全域限制",
+      "zh_desc": "这个卡名的效果1回合只能使用1次。①：从手卡把1只怪兽送去墓地才能发动。自己从卡组抽2张卡。",
+      "note": "卡名限制行必须单独成为一个 RESTRICTION unit，不混进 ①。"
+    },
+    {
+      "case": "simple_reference",
+      "name": "回归-简单引用",
+      "zh_desc": "①：以自己墓地1只4星以下的怪兽为对象才能发动。那只怪兽特殊召唤。",
+      "note": "TARGET 子句产生对象，RESOLUTION 的「那只怪兽」指回它。"
+    },
+    {
+      "case": "unknown_is_not_false",
+      "name": "回归-无法确定",
+      "zh_desc": "①：这张卡的攻击力变成原本攻击力的一半。",
+      "note": "parser 认不出动作时必须记 UNKNOWN，绝不能说成「这张卡不做事」。"
+    },
+    {
+      "case": "quoted_name_is_not_race",
+      "name": "回归-引号卡名不是种族",
+      "zh_desc": "①：从卡组把1只「青眼白龙」加入手卡。",
+      "note": "「青眼白龙」里的「龙」不能变成 race=DRAGON，只能是名字。"
+    },
+    {
+      "case": "negation_is_not_a_claim",
+      "name": "回归-否定不是断言",
+      "zh_desc": "这张卡不能通常召唤。",
+      "note": "不能把「不能通常召唤」记成 NORMAL_SUMMON —— 那会把意思反过来。"
+    }
+  ]
+}

@@ -218,20 +218,30 @@ def _parse_numeric(masked: str, selector: CardSelector) -> None:
         selector.defense = NumericConstraint("<=" if "以下" in raw else ">=", value)
 
 
+def _longest_first(vocabulary: dict[str, str]) -> list[tuple[str, str]]:
+    """Longest surface form wins.
+
+    Chinese vocabulary is full of proper prefixes: 「海龙族」contains 「龙族」,
+    「兽战士族」contains 「兽族」, 「魔法·陷阱卡」contains 「陷阱卡」. Matching in
+    insertion order would silently turn a Sea Serpent into a Dragon.
+    """
+    return sorted(vocabulary.items(), key=lambda kv: -len(kv[0]))
+
+
+_VOCABULARIES = (
+    ("race", RACE_ZH),
+    ("attribute", ATTRIBUTE_ZH),
+    ("card_type", CARD_TYPE_ZH),
+)
+
+
 def _parse_vocabulary(masked: str, selector: CardSelector) -> None:
-    for word, canonical in RACE_ZH.items():
-        if word in masked:
-            selector.race = canonical
-            break
-    for word, canonical in ATTRIBUTE_ZH.items():
-        if word in masked:
-            selector.attribute = canonical
-            break
-    for word, canonical in CARD_TYPE_ZH.items():
-        if word in masked:
-            selector.card_type = canonical
-            break
-    for word, canonical in MONSTER_TAG_ZH.items():
+    for attr, vocabulary in _VOCABULARIES:
+        for word, canonical in _longest_first(vocabulary):
+            if word in masked:
+                setattr(selector, attr, canonical)
+                break
+    for word, canonical in _longest_first(MONSTER_TAG_ZH):
         if word in masked and canonical not in selector.tags:
             selector.tags.append(canonical)
 

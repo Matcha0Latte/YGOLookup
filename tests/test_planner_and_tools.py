@@ -18,24 +18,16 @@ from ygolookup.agent.tools import (
 from ygolookup.db.connection import connect
 from ygolookup.db.migrations import apply_migrations
 from ygolookup.effects.service import build_effects
-from ygolookup.ingest.normalize import normalize_ygoprodeck_record
-from ygolookup.ingest.pipeline import ingest_records
 from ygolookup.query.planner import plan
 
-FIXTURE = Path(__file__).parent / "fixtures" / "search_fixture.json"
-RAW = json.loads(FIXTURE.read_text(encoding="utf-8"))["data"]
+from conftest import FIXTURE, RAW, load_fixture_pool
 
 
 @pytest.fixture(scope="module")
 def conn():
     connection = connect(Path(__file__).parent / ".tmp" / "tools.db")
     apply_migrations(connection)
-    ingest_records(
-        connection,
-        [normalize_ygoprodeck_record(raw) for raw in RAW],
-        source_name="test_fixture",
-        source_version="1",
-    )
+    load_fixture_pool(connection)
     build_effects(connection)
     connection.commit()
     yield connection
@@ -71,7 +63,7 @@ def test_plan_marks_cost():
     result = plan("以除外墓地怪兽作为cost特殊召唤")
     exists = result.query.to_dict()["where"]["and"][-1]
     parts = {c["field"]: c["value"] for c in exists["where"]["and"]}
-    assert parts["effect.part"] == "COST"
+    assert parts["clause.role"] == "COST"
 
 
 def test_plan_reports_unmatched_text():
