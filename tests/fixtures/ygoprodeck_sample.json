@@ -1,0 +1,129 @@
+{
+  "source": "ygoprodeck-cardinfo-v7 (trimmed fixture)",
+  "data": [
+    {
+      "id": 89631139,
+      "name": "Blue-Eyes White Dragon",
+      "type": "Normal Monster",
+      "frameType": "normal",
+      "desc": "This legendary dragon is a powerful engine of destruction. Virtually invincible, very few have faced this awesome creature and lived to tell the tale.",
+      "atk": 3000,
+      "def": 2500,
+      "level": 8,
+      "race": "Dragon",
+      "attribute": "LIGHT",
+      "archetype": "Blue-Eyes",
+      "card_images": [{ "id": 89631139 }]
+    },
+    {
+      "id": 46986414,
+      "name": "Dark Magician",
+      "type": "Normal Monster",
+      "frameType": "normal",
+      "desc": "The ultimate wizard in terms of attack and defense.",
+      "atk": 2500,
+      "def": 2100,
+      "level": 7,
+      "race": "Spellcaster",
+      "attribute": "DARK",
+      "archetype": "Dark Magician",
+      "card_images": [{ "id": 46986414 }]
+    },
+    {
+      "id": 84013237,
+      "name": "Number 39: Utopia",
+      "type": "XYZ Monster",
+      "frameType": "xyz",
+      "desc": "2 Level 4 monsters\nWhen any player's monster declares an attack: You can detach 1 material from this card; negate the attack.",
+      "atk": 2500,
+      "def": 2000,
+      "level": 4,
+      "race": "Warrior",
+      "attribute": "LIGHT",
+      "card_images": [{ "id": 84013237 }]
+    },
+    {
+      "id": 1861629,
+      "name": "Decode Talker",
+      "type": "Link Monster",
+      "frameType": "link",
+      "desc": "2+ Effect Monsters\nGains 500 ATK for each monster this card points to.",
+      "atk": 2300,
+      "linkval": 3,
+      "race": "Cyberse",
+      "attribute": "DARK",
+      "card_images": [{ "id": 1861629 }]
+    },
+    {
+      "id": 20409757,
+      "name": "Timegazer Magician",
+      "type": "Pendulum Effect Monster",
+      "frameType": "effect_pendulum",
+      "desc": "[ Pendulum Effect ]\nYou must control no monsters to activate this card.\n[ Monster Effect ]\nYou can Special Summon this card from your hand.",
+      "atk": 1200,
+      "def": 600,
+      "level": 3,
+      "scale": 8,
+      "race": "Spellcaster",
+      "attribute": "DARK",
+      "card_images": [{ "id": 20409757 }]
+    },
+    {
+      "id": 63977008,
+      "name": "Junk Synchron",
+      "type": "Tuner Monster",
+      "frameType": "effect",
+      "desc": "When this card is Normal Summoned: You can target 1 Level 2 or lower monster in your GY; Special Summon it in Defense Position.",
+      "atk": 1300,
+      "def": 500,
+      "level": 3,
+      "race": "Warrior",
+      "attribute": "DARK",
+      "card_images": [{ "id": 63977008 }]
+    },
+    {
+      "id": 12600382,
+      "name": "Exodia Necross",
+      "type": "Effect Monster",
+      "frameType": "effect",
+      "desc": "Cannot be Normal Summoned/Set. This card's ATK/DEF are each equal to the number of 'Forbidden One' monsters in your GY x 1000.",
+      "atk": -1,
+      "def": -1,
+      "level": 4,
+      "race": "Spellcaster",
+      "attribute": "DARK",
+      "card_images": [{ "id": 12600382 }]
+    },
+    {
+      "id": 5318639,
+      "name": "Mystical Space Typhoon",
+      "type": "Spell Card",
+      "frameType": "spell",
+      "desc": "Target 1 Spell/Trap on the field; destroy that target.",
+      "race": "Quick-Play",
+      "card_images": [{ "id": 5318639 }]
+    },
+    {
+      "id": 41420027,
+      "name": "Solemn Judgment",
+      "type": "Trap Card",
+      "frameType": "trap",
+      "desc": "When a monster would be Summoned, OR a Spell/Trap is activated: Pay half your LP; negate the Summon or activation, and if you do, destroy that card.",
+      "race": "Counter",
+      "card_images": [{ "id": 41420027 }]
+    },
+    {
+      "id": 3298103292,
+      "name": "Sheep Token",
+      "type": "Token",
+      "frameType": "token",
+      "desc": "This card can be used as a \"Sheep Token\".",
+      "atk": 0,
+      "def": 0,
+      "level": 1,
+      "race": "Beast",
+      "attribute": "EARTH",
+      "card_images": [{ "id": 3298103292 }]
+    }
+  ]
+}
