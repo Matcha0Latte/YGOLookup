@@ -104,33 +104,68 @@ python -m ygolookup.cli stats
 
 ---
 
+效果构建（首次导入后必须跑一次）：
+
+```bash
+python -m ygolookup.cli effects
+```
+
+---
+
 ## 示例查询
 
 ```bash
-# 结构化字段查询
+# 结构化字段查询（裸字段名默认属于 card.*）
 python -m ygolookup.cli search --filter race=DRAGON --filter attribute=DARK --filter "level<=4"
 
-# Query DSL（JSON）
-python -m ygolookup.cli search --query-file examples/query.json
+# 效果检索（effect.* 会自动包成 exists 块）
+python -m ygolookup.cli search --filter effect.action=SPECIAL_SUMMON \
+                               --filter effect.source_zone=EXTRA_DECK \
+                               --filter effect.target_race=DRAGON
+
+# 以「除外墓地」为 COST 的卡
+python -m ygolookup.cli search --filter effect.part=COST \
+                               --filter effect.action=BANISH \
+                               --filter effect.source_zone=GRAVEYARD
+
+# 自然语言（规则式 planner）
+python -m ygolookup.cli search --nl "找能够从额外卡组特殊召唤龙族怪兽的卡"
+
+# Query AST（JSON 文件），--explain 只打印 AST
+python -m ygolookup.cli search --query-file query.json --explain
+
+# 查看单张卡的解析结果
+python -m ygolookup.cli effects-show "Junk Synchron"
 ```
+
+完整的 AST 字段与运算符见 [docs/query-dsl.md](docs/query-dsl.md)。
 
 ---
 
 ## 项目状态
 
+当前数据库（本地已构建）：**14,597 张卡 / 40,151 个 effect / 61,370 条 predicate**，0 校验错误。
+
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | Phase 0 | 仓库骨架 / 测试框架 / 文档结构 | 完成 |
-| Phase 1 | Canonical Card Database + 导入器 | 进行中 |
-| Phase 2 | Effect 数据模型 + splitter + 结构化 schema | 待开始 |
-| Phase 3 | Query DSL + Structured Retrieval | 待开始 |
-| Phase 4+ | FTS5 / Hybrid / Semantic / Agent Tools / LLM Planner | 规划中 |
+| Phase 1 | Canonical Card Database + cdb / JSON 导入器 | 完成 |
+| Phase 2 | Effect 数据模型 + splitter + 确定性 parser + 三值 schema | 完成 |
+| Phase 3 | Query DSL + Structured Retrieval + Agent 工具层 | 完成 |
+| Phase 4 | FTS5 全文检索 | 待开始 |
+| Phase 5 | Hybrid Retrieval（structured ⊕ FTS ⊕ semantic） | 待开始 |
+| Phase 6 | Semantic Retrieval（以 `effect_id` 为索引粒度） | 待开始 |
+| Phase 7 | LLM Query Planner / LLM 效果抽取 | 待开始 |
+| Phase 8 | `search_rulings` 裁定接口（唯一允许联网的部分） | 待开始 |
 
 ---
 
 ## 已知限制
 
-- 当前导入源为 YGOProDeck JSON；`cards.cdb` 读取器已实现但未做端到端验证（无公开直链镜像）。
-- Effect parser 为确定性规则解析器，仅覆盖高频措辞，未覆盖全部裁定细节。
-- 未解析出的字段一律标记为 `UNKNOWN`，**不会**被当作「卡片没有该效果」。
-- 语义检索未提供真实 embedding 模型时，使用确定性 fallback，仅用于接口验证。
+- 当前导入源为 YGOProDeck JSON；`cards.cdb` 读取器已实现并用合成 cdb 做过端到端测试，但未用真实官方 `cards.cdb` 验证（无公开直链镜像）。
+- Effect parser 只处理英文原文，覆盖高频措辞，不处理裁定细节。
+- OR 条件（"Dragon or Warrior"）目前只记录第一个分支，未拆成多条候选谓词。
+- Race 识别基于文本 token，卡名里含种族词（如 "Stardust Dragon"）会产生误报。
+- 未解析出的字段一律标记为 `UNKNOWN`（`action IS NULL`），**不会**被当作「卡片没有该效果」。
+- Planner 是规则式占位实现；遇到无法映射的表述会返回 `unmatched`，应回退到 FTS / 语义检索。
+- `fulltext_search` / `semantic_search` 接口已声明，尚未实现。

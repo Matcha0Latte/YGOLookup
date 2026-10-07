@@ -1,0 +1,89 @@
+{
+  "_comment": "Small card pool tuned for structured-search assertions. Same shape as a YGOProDeck dump so the normal ingest path can load it.",
+  "data": [
+    {
+      "id": 10000001,
+      "name": "Testcase Dragon Alpha",
+      "type": "Effect Monster",
+      "frameType": "effect",
+      "desc": "Banish 1 LIGHT monster from your GY; Special Summon 1 Dragon monster from your Extra Deck.",
+      "atk": 1800,
+      "def": 1200,
+      "level": 4,
+      "race": "Dragon",
+      "attribute": "DARK",
+      "card_images": [{ "id": 10000001 }]
+    },
+    {
+      "id": 10000002,
+      "name": "Testcase Fiend Beta",
+      "type": "Effect Monster",
+      "frameType": "effect",
+      "desc": "If this card is Normal Summoned: You can add 1 DARK monster from your Deck to your hand.",
+      "atk": 1000,
+      "def": 1000,
+      "level": 3,
+      "race": "Fiend",
+      "attribute": "DARK",
+      "archetype": "Testcase",
+      "card_images": [{ "id": 10000002 }]
+    },
+    {
+      "id": 10000003,
+      "name": "Testcase Mystic Spell",
+      "type": "Spell Card",
+      "frameType": "spell",
+      "desc": "Target 1 Spell/Trap on the field; destroy that target.",
+      "race": "Quick-Play",
+      "card_images": [{ "id": 10000003 }]
+    },
+    {
+      "id": 10000004,
+      "name": "Testcase Tuner Gamma",
+      "type": "Tuner Monster",
+      "frameType": "effect",
+      "desc": "Discard 1 card; draw 2 cards.",
+      "atk": 1300,
+      "def": 500,
+      "level": 4,
+      "race": "Warrior",
+      "attribute": "LIGHT",
+      "card_images": [{ "id": 10000004 }]
+    },
+    {
+      "id": 10000005,
+      "name": "Testcase Big Dragon",
+      "type": "Effect Monster",
+      "frameType": "effect",
+      "desc": "Special Summon 1 Level 4 or lower monster from your hand.",
+      "atk": 2600,
+      "def": 2000,
+      "level": 8,
+      "race": "Dragon",
+      "attribute": "LIGHT",
+      "card_images": [{ "id": 10000005 }]
+    },
+    {
+      "id": 10000006,
+      "name": "Testcase Counter Trap",
+      "type": "Trap Card",
+      "frameType": "trap",
+      "desc": "When a monster would be Summoned: Negate the Summon, and if you do, destroy that monster.",
+      "race": "Counter",
+      "card_images": [{ "id": 10000006 }]
+    },
+    {
+      "id": 10000007,
+      "name": "Testcase Grave Tender",
+      "type": "Effect Monster",
+      "frameType": "effect",
+      "desc": "You can banish 1 monster from your GY; add 1 monster from your Deck to your hand.",
+      "atk": 900,
+      "def": 900,
+      "level": 2,
+      "race": "Spellcaster",
+      "attribute": "EARTH",
+      "card_images": [{ "id": 10000007 }]
+    }
+  ]
+}

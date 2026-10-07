@@ -12,10 +12,15 @@ from pathlib import Path
 
 from .config import config
 from .db.connection import connect
+from .db.maintenance import analyze
 from .db.migrations import apply_migrations
 from .db.repository import card_archetypes, card_external_ids, card_flags, card_names, find_card_by_name, stats
 from .effects.service import build_effects
 from .ingest.service import ingest_from_cdb, ingest_from_ygoprodeck
+from .query.dsl import Query
+from .query.parser import parse_filters
+from .query.planner import plan
+from .retrieval.structured.search import StructuredSearcher
 
 
 def _open_db(args) :
@@ -68,6 +73,7 @@ def cmd_effects(args) -> int:
         card_ids = [row["card_id"]]
 
     result = build_effects(conn, card_ids=card_ids)
+    analyze(conn)  # refresh planner statistics after a bulk rebuild
     print(json.dumps(result.as_dict(), indent=2, ensure_ascii=False))
     conn.close()
     return 0
@@ -104,6 +110,31 @@ def cmd_effects_show(args) -> int:
         ],
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
+    conn.close()
+    return 0
+
+
+def cmd_search(args) -> int:
+    conn = _open_db(args)
+
+    if args.nl:
+        planned = plan(args.nl, limit=args.limit)
+        if not args.quiet:
+            print(f"# matched: {planned.matched or '(none)'}", file=sys.stderr)
+            if planned.unmatched:
+                print(f"# unmatched: {planned.unmatched}", file=sys.stderr)
+        query = planned.query
+    elif args.query_file:
+        query = Query.from_dict(json.loads(Path(args.query_file).read_text(encoding="utf-8")))
+    else:
+        query = parse_filters(args.filter or [])
+
+    if args.explain:
+        print(json.dumps(query.to_dict(), indent=2, ensure_ascii=False))
+        return 0
+
+    result = StructuredSearcher(conn).search(query, limit=args.limit, with_effects=args.effects)
+    print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
     conn.close()
     return 0
 
@@ -163,6 +194,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("name")
     p_show.add_argument("--fuzzy", action="store_true")
     p_show.set_defaults(func=cmd_effects_show)
+
+    p_search = sub.add_parser("search", help="structured card / effect search")
+    p_search.add_argument("--filter", action="append", metavar="FIELD=VALUE",
+                          help="e.g. race=DRAGON, level<=4, effect.action=SPECIAL_SUMMON")
+    p_search.add_argument("--nl", metavar="TEXT", help="natural language (rule-based planner)")
+    p_search.add_argument("--query-file", type=Path, help="JSON Query AST file")
+    p_search.add_argument("--limit", type=int, default=20)
+    p_search.add_argument("--no-effects", dest="effects", action="store_false",
+                          help="omit matched effect text from the output")
+    p_search.add_argument("--explain", action="store_true", help="print the Query AST and exit")
+    p_search.add_argument("--quiet", action="store_true")
+    p_search.set_defaults(func=cmd_search, effects=True)
 
     p_card = sub.add_parser("card", help="look up a single card")
     p_card.add_argument("name")
