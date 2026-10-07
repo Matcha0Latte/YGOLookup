@@ -89,35 +89,53 @@ AST 是纯 JSON：可序列化、可 diff，也能直接当测试 fixture 用。
 | `card.flag` | enum | `TUNER` `PENDULUM` `TOON` `SPIRIT` `UNION` `GEMINI` `FLIP` `TRAP_MONSTER` `ARMOR` `MAXIMUM` |
 | `card.name` | text | 任意名称 / 别名行；`contains` 走 LIKE |
 
-### `effect.*`（必须位于 `exists` 块内）
+### `clause.*` / `effect.*`（必须位于 `exists` 块内）
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `effect.part` | enum | `CONDITION` `COST` `RESOLUTION` `RESTRICTION` |
-| `effect.action` | enum | 见下方词表 |
-| `effect.source_zone` | enum | `DECK` `EXTRA_DECK` `HAND` `GRAVEYARD` `BANISHED` `FIELD` `MONSTER_ZONE` `SPELL_TRAP_ZONE` `PENDULUM_ZONE` `ANYWHERE` |
-| `effect.destination_zone` | enum | 同一套词表 |
-| `effect.target_race` | enum | |
-| `effect.target_attribute` | enum | |
-| `effect.target_card_category` | enum | `MONSTER` `SPELL` `TRAP` `SPELL_TRAP` |
-| `effect.target_archetype` / `effect.target_name` | text | |
-| `effect.target_level` | int（虚拟） | 仅支持比较运算 |
-| `effect.target_atk` | int（虚拟） | 仅支持比较运算 |
-| `effect.target_rank` / `effect.target_link_rating` / `effect.target_count` | int | |
-| `effect.target_tuner` | 三值 | `TRUE` `FALSE` `UNKNOWN` |
-| `effect.once_per_turn` | 三值 | `TRUE` `FALSE` `UNKNOWN` |
-| `effect.confidence` | number | parser 置信度 |
+一个 `exists: effect` 块会编译成 unit → clause → predicate 三层嵌套 `EXISTS`；
+块内可以混用 `clause.*` 和 `effect.*`。
 
-**虚拟区间字段。**「4 星以下」存成 `target_level_max = 4`；精确的「4 星」存成 `min = max = 4`。因此 `effect.target_level` 配 `lte` 会编译成 `(min <= ? OR max <= ?)`，两种写法都能命中。这类字段只支持比较运算符。
+| 字段 | 落在哪一层 | 类型 | 说明 |
+| --- | --- | --- | --- |
+| `clause.role` | clause | enum | `CONDITION` `COST` `TARGET` `RESOLUTION` `RESTRICTION` `UNKNOWN` |
+| `clause.once_per_turn` | clause | 三值 | `TRUE` `FALSE` `UNKNOWN` |
+| `clause.confidence` | clause | number | |
+| `effect.action` | predicate | enum | 见下方词表；**`action_known = 0` 是 UNKNOWN，不是 FALSE** |
+| `effect.action_known` | predicate | 0 / 1 | |
+| `effect.subject` | predicate | enum | `SELF` `OPPONENT` `PLAYER` `ANY` `UNKNOWN` |
+| `effect.source_zone` / `effect.destination_zone` | predicate | enum | `DECK` `EXTRA_DECK` `HAND` `GRAVEYARD` `BANISHED` `FIELD` `MONSTER_ZONE` `SPELL_TRAP_ZONE` `PENDULUM_ZONE` `FIELD_ZONE` `ANYWHERE` |
+| `effect.object_race` | predicate | enum | |
+| `effect.object_attribute` | predicate | enum | |
+| `effect.object_card_type` | predicate | enum | `MONSTER` `SPELL` `TRAP` `SPELL_TRAP` |
+| `effect.object_archetype` / `effect.object_name` | predicate | text | |
+| `effect.object_count` | predicate | int | |
+| `effect.object_level` | predicate | int（虚拟） | 仅支持比较运算 |
+| `effect.object_atk` / `effect.object_defense` | predicate | int（虚拟） | 仅支持比较运算 |
+| `effect.object_rank` / `effect.object_link_rating` | predicate | int（虚拟） | 仅支持比较运算 |
+| `effect.result_ref` / `effect.object_ref` | predicate | text | 简单指代关系 |
+| `effect.extracted_by` | predicate | enum | `rule` `grammar` `llm` |
+| `effect.confidence` | predicate | number | |
 
-**`SPELL_TRAP` 的不对称。** 存成 `SPELL_TRAP` 的谓词（"Target 1 Spell/Trap"）会被查 `SPELL` 或查 `TRAP` 的请求命中；但反过来，查 `SPELL_TRAP` 只匹配那个合并标记本身。
+**虚拟区间字段。** 卡面写的是结构化比较「4星以下」→ `{op: "<=", value: 4}`；
+精确的「4星」→ `{op: "==", value: 4}`。查询时做区间求交，并且**偏召回**：
+卡上 `<= 9` 会被问 `<= 4` 的请求命中，`= 3` 也会，但 `>= 8` 不会。
+这类字段只支持 `lt` / `lte` / `gt` / `gte`。
+
+**`SPELL_TRAP` 的不对称。** 存成 `SPELL_TRAP` 的谓词（「以场上1张魔法·陷阱卡为对象」）
+会被查 `SPELL` 或查 `TRAP` 的请求命中；但反过来，查 `SPELL_TRAP` 只匹配那个
+合并标记本身。
 
 **Action 词表：** `SPECIAL_SUMMON` `NORMAL_SUMMON` `TRIBUTE_SUMMON`
-`ADD_TO_HAND` `SEARCH` `DRAW` `SEND_TO_GRAVEYARD` `BANISH` `DESTROY` `NEGATE`
-`RETURN_TO_HAND` `RETURN_TO_DECK` `TRIBUTE` `DISCARD` `MILL` `CHANGE_POSITION`
-`INCREASE_ATK` `DECREASE_ATK` `EXCAVATE` `REVEAL` `ATTACH` `DETACH`
-`GAIN_CONTROL` `COPY_EFFECT` `EQUIP` `SET_CARD` `PREVENT_DESTRUCTION`
-`PREVENT_ACTIVATION` `CHANGE_NAME` `SHUFFLE`
+`FUSION_SUMMON` `RITUAL_SUMMON` `SYNCHRO_SUMMON` `XYZ_SUMMON` `LINK_SUMMON`
+`ADD_TO_HAND` `SEARCH` `DRAW` `SEND_TO_GRAVEYARD` `MILL` `BANISH` `DESTROY`
+`NEGATE` `NEGATE_ACTIVATION` `NEGATE_EFFECTS` `RETURN_TO_HAND` `RETURN_TO_DECK`
+`RETURN_TO_EXTRA_DECK` `TRIBUTE` `DISCARD` `DETACH` `REVEAL` `EXCAVATE`
+`SHUFFLE` `SET_CARD` `EQUIP` `GAIN_CONTROL` `COPY_EFFECT`
+`CHANGE_POSITION` `CHANGE_NAME` `CHANGE_ATTRIBUTE` `CHANGE_RACE`
+`CHANGE_LEVEL` `CHANGE_SCALE`
+`INCREASE_ATK` `DECREASE_ATK` `INCREASE_DEF` `DECREASE_DEF`
+`PAY_LP` `ATTACK_DIRECTLY` `INFLICT_DAMAGE` `PIERCING_DAMAGE`
+`PREVENT_DESTRUCTION` `PREVENT_ACTIVATION` `PREVENT_TARGETING`
+`PREVENT_ATTACK` `PREVENT_SUMMON`
 
 ---
 
@@ -147,10 +165,10 @@ AST 是纯 JSON：可序列化、可 diff，也能直接当测试 fixture 用。
     "exists": "effect",
     "where": {
       "and": [
-        { "field": "effect.part", "op": "eq", "value": "RESOLUTION" },
+        { "field": "clause.role", "op": "eq", "value": "RESOLUTION" },
         { "field": "effect.action", "op": "eq", "value": "SPECIAL_SUMMON" },
         { "field": "effect.source_zone", "op": "eq", "value": "EXTRA_DECK" },
-        { "field": "effect.target_race", "op": "eq", "value": "DRAGON" }
+        { "field": "effect.object_race", "op": "eq", "value": "DRAGON" }
       ]
     }
   }
@@ -167,7 +185,7 @@ AST 是纯 JSON：可序列化、可 diff，也能直接当测试 fixture 用。
         "exists": "effect",
         "where": {
           "and": [
-            { "field": "effect.part", "op": "eq", "value": "COST" },
+            { "field": "clause.role", "op": "eq", "value": "COST" },
             { "field": "effect.action", "op": "eq", "value": "BANISH" },
             { "field": "effect.source_zone", "op": "eq", "value": "GRAVEYARD" }
           ]
@@ -209,7 +227,11 @@ python -m ygolookup.cli search --query-file query.json --explain
 ```
 
 紧凑语法里的别名：`level` / `rank` → `card.level_rank`，`type` → `card.card_category`，
-`effect.race` → `effect.target_race`，`effect.level` → `effect.target_level`。
+`effect.race` → `effect.object_race`，`effect.level` → `effect.object_level`，
+`effect.part` → `clause.role`。
+
+**注意：** `clause.*` 和 `effect.*` 都必须位于 `exists` 块内——紧凑语法会自动
+把这两个前缀包起来。
 
 ---
 
