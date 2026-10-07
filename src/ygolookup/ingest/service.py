@@ -10,6 +10,7 @@ from .normalize import normalize_cdb_row
 from .pipeline import IngestResult, ingest_records
 from .ygopro import iter_cdb_rows
 from .ygopro import ygoprodeck as ypd
+from . import ygocdb
 
 
 def source_version_for_cdb(path: Path) -> str:
@@ -65,4 +66,28 @@ def ingest_from_ygoprodeck(
         content_sha256=fetched.sha256,
         payload_bytes=len(fetched.payload),
         notes="YGOProDeck cardinfo dump",
+    )
+
+
+def apply_ygocdb_text(
+    conn: sqlite3.Connection,
+    *,
+    raw_dir: Path,
+    local_path: str | Path | None = None,
+) -> ygocdb.ApplyResult:
+    """Attach Simplified Chinese text and names from ygocdb.
+
+    This is an enrichment pass: cards must already exist (imported from
+    YGOProDeck or cards.cdb). Records are joined on the 8-digit passcode.
+    """
+    fetched = (
+        ygocdb.load_local(local_path)
+        if local_path
+        else ygocdb.fetch(raw_dir=raw_dir)
+    )
+    return ygocdb.apply_chinese_text(
+        conn,
+        fetched.doc,
+        source_version=fetched.source_version,
+        file_path=str(fetched.path),
     )

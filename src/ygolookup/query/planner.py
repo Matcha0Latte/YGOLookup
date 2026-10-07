@@ -251,16 +251,16 @@ def plan(text: str, *, limit: int = 50) -> PlanResult:
         effect_conditions.append(FieldCondition("effect.source_zone", "eq", zone.value))
 
     if _COST_RE.search(lowered):
-        effect_conditions.insert(0, FieldCondition("effect.part", "eq", "COST"))
+        effect_conditions.insert(0, FieldCondition("clause.role", "eq", "COST"))
         matched.append("cost")
 
     if _ONCE_PER_TURN_RE.search(lowered):
-        effect_conditions.append(FieldCondition("effect.once_per_turn", "eq", "TRUE"))
+        effect_conditions.append(FieldCondition("clause.once_per_turn", "eq", "TRUE"))
         matched.append("once per turn")
 
-    # A second race/attribute mention usually constrains the *target*.
+    # A second race/attribute mention usually constrains the *object*.
     if race and lowered.count("dragon") + lowered.count("龙") >= 1 and action:
-        effect_conditions.append(FieldCondition("effect.target_race", "eq", race))
+        effect_conditions.append(FieldCondition("effect.object_race", "eq", race))
 
     conditions = list(card_conditions)
     if effect_conditions:

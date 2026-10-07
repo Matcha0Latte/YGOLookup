@@ -25,10 +25,15 @@ TEXT_FIELDS = frozenset(
         "card.canonical_name",
         "card.archetype",
         "card.name",
-        "effect.target_name",
-        "effect.target_archetype",
+        "effect.object_name",
+        "effect.object_archetype",
+        "effect.result_ref",
+        "effect.object_ref",
     }
 )
+
+# Filters that live inside an `exists: effect` block.
+NESTED_PREFIXES = ("effect.", "clause.")
 
 _OP_MAP = {
     "=": "eq",
@@ -78,19 +83,22 @@ FIELD_ALIASES = {
     "card.type": "card.card_category",
     "card.link": "card.link_rating",
     "card.scale": "card.pendulum_scale",
-    "effect.race": "effect.target_race",
-    "effect.attribute": "effect.target_attribute",
-    "effect.level": "effect.target_level",
-    "effect.rank": "effect.target_rank",
-    "effect.archetype": "effect.target_archetype",
+    "effect.race": "effect.object_race",
+    "effect.attribute": "effect.object_attribute",
+    "effect.level": "effect.object_level",
+    "effect.rank": "effect.object_rank",
+    "effect.atk": "effect.object_atk",
+    "effect.archetype": "effect.object_archetype",
+    "effect.card_type": "effect.object_card_type",
+    "effect.part": "clause.role",
 }
 
 
 def parse_filters(expressions: list[str]) -> Query:
     """`--filter a=1 --filter b<=2` -> Query(and([...])).
 
-    `effect.*` filters are wrapped in an `exists: effect` block automatically,
-    because a bare effect predicate at card level has no meaning.
+    `effect.*` and `clause.*` filters are wrapped in an `exists: effect` block
+    automatically, because a bare effect predicate at card level has no meaning.
     """
     parsed: list[dict] = []
     for expression in expressions:
@@ -101,8 +109,9 @@ def parse_filters(expressions: list[str]) -> Query:
     if not parsed:
         return Query()
 
-    card_nodes = [n for n in parsed if not n["field"].startswith("effect.")]
-    effect_nodes = [n for n in parsed if n["field"].startswith("effect.")]
+    nested = [n for n in parsed if n["field"].startswith(NESTED_PREFIXES)]
+    card_nodes = [n for n in parsed if n not in nested]
+    effect_nodes = nested
 
     conditions = [parse_condition(n) for n in card_nodes]
     if effect_nodes:

@@ -120,9 +120,14 @@ class ParsedUnit:
 
     @property
     def status(self) -> ParseStatus:
+        # A material line or a card-wide restriction has no action to resolve;
+        # reporting it as UNRESOLVED would inflate the failure count.
+        if self.unit.kind in (UnitKind.MATERIAL, UnitKind.RESTRICTION):
+            return ParseStatus.OK
+
         predicates = [p for c in self.clauses for p in c.predicates]
         if not predicates:
-            return ParseStatus.UNRESOLVED if self.unit.kind is not UnitKind.MATERIAL else ParseStatus.OK
+            return ParseStatus.UNRESOLVED
         known = [p for p in predicates if p.action_known]
         if not known:
             return ParseStatus.UNRESOLVED

@@ -16,7 +16,7 @@ from .db.maintenance import analyze
 from .db.migrations import apply_migrations
 from .db.repository import card_archetypes, card_external_ids, card_flags, card_names, find_card_by_name, stats
 from .effects.service import build_effects
-from .ingest.service import ingest_from_cdb, ingest_from_ygoprodeck
+from .ingest.service import apply_ygocdb_text, ingest_from_cdb, ingest_from_ygoprodeck
 from .query.dsl import Query
 from .query.parser import parse_filters
 from .query.planner import plan
@@ -43,12 +43,18 @@ def cmd_ingest(args) -> int:
             raw_dir=args.raw_dir or config.raw_dir,
             local_path=args.path,
         )
+    elif args.source == "ygocdb":
+        result = apply_ygocdb_text(
+            conn,
+            raw_dir=args.raw_dir or config.raw_dir,
+            local_path=args.path,
+        )
     else:  # pragma: no cover - argparse restricts choices
         print(f"error: unknown source {args.source}", file=sys.stderr)
         return 2
 
     print(json.dumps(result.as_dict(), indent=2, ensure_ascii=False))
-    if result.errors:
+    if getattr(result, "errors", None):
         print(f"warning: {len(result.errors)} record(s) failed", file=sys.stderr)
     conn.close()
     return 0
@@ -90,22 +96,36 @@ def cmd_effects_show(args) -> int:
     payload = {
         "card_id": row["card_id"],
         "name": row["canonical_name"],
-        "effects": [
+        "units": [
             {
-                "index": e["effect_index"],
-                "scope": e["scope"],
-                "marker": e["marker"],
-                "raw_text": e["raw_text"],
-                "predicates": [
-                    json.loads(p["payload_json"])
-                    for p in conn.execute(
-                        "SELECT payload_json FROM effect_predicate WHERE effect_id = ? ORDER BY predicate_id",
-                        (e["effect_id"],),
+                "index": u["unit_index"],
+                "scope": u["scope"],
+                "kind": u["kind"],
+                "marker": u["marker"],
+                "status": u["parse_status"],
+                "raw_text": u["raw_text"],
+                "clauses": [
+                    {
+                        "role": c["role"],
+                        "raw_text": c["raw_text"],
+                        "predicates": [
+                            json.loads(p["payload_json"])
+                            for p in conn.execute(
+                                "SELECT payload_json FROM effect_predicate"
+                                " WHERE clause_id = ? ORDER BY pred_index",
+                                (c["clause_id"],),
+                            )
+                        ],
+                    }
+                    for c in conn.execute(
+                        "SELECT * FROM effect_clause WHERE unit_id = ? ORDER BY clause_index",
+                        (u["unit_id"],),
                     )
                 ],
             }
-            for e in conn.execute(
-                "SELECT * FROM effect WHERE card_id = ? ORDER BY effect_index", (row["card_id"],)
+            for u in conn.execute(
+                "SELECT * FROM effect_unit WHERE card_id = ? ORDER BY unit_index",
+                (row["card_id"],),
             )
         ],
     }
@@ -176,8 +196,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_ingest = sub.add_parser("ingest", help="import card data")
-    p_ingest.add_argument("--source", choices=["cdb", "ygoprodeck"], required=True)
-    p_ingest.add_argument("--path", type=Path, default=None, help="cards.cdb path, or a local JSON snapshot")
+    p_ingest.add_argument("--source", choices=["cdb", "ygoprodeck", "ygocdb"], required=True)
+    p_ingest.add_argument(
+        "--path",
+        type=Path,
+        default=None,
+        help="cards.cdb path, a local JSON snapshot, or a local ygocdb cards.zip",
+    )
     p_ingest.add_argument("--url", default=None, help="override the JSON source URL")
     p_ingest.add_argument("--raw-dir", type=Path, default=None, help="where raw snapshots are stored")
     p_ingest.set_defaults(func=cmd_ingest)

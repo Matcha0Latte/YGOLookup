@@ -104,6 +104,10 @@ def _make(index: int, role: ClauseRole, start: int, end: int, raw: str, once: Tr
 
 def _classify_pre_anchor(segment: str) -> ClauseRole:
     """Classify a segment sitting in front of the activation anchor."""
+    # "1回合1次" sits in front of the anchor but is a restriction, not a
+    # condition and certainly not a cost.
+    if _is_restriction_sentence(segment) and not has_cost_verb(segment):
+        return ClauseRole.RESTRICTION
     if TARGET_PATTERN.search(segment):
         return ClauseRole.TARGET
     if has_cost_verb(segment):
